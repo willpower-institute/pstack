@@ -23,10 +23,19 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 
 ```
 ├── core/          # kernel: loader, registry, db, auth, events, jobs, ai
-├── addons/        # โมดูลทั้งหมด (users, storage, ai_agent, ...)
+├── addons/        # โมดูลทั้งหมด (users, storage, ai_agent, line_oa, ...)
 ├── cli.py         # pstack CLI
 └── docker-compose.yml
 ```
+
+## โมดูลที่วางแผนไว้
+
+| โมดูล | หน้าที่ |
+|---|---|
+| `users` | auth (JWT), RBAC, user management |
+| `storage` | file upload / object storage |
+| `ai_agent` | tool registry, agent runtime (Claude), SSE chat API |
+| `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, account linking, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
 
 ## Roadmap
 
@@ -34,7 +43,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [ ] Phase 1 — Kernel (module loader, manifest, registry, migrations, CLI)
 - [ ] Phase 2 — Core modules (users/auth/RBAC, storage, event bus)
 - [ ] Phase 3 — AI Agent module (tool registry, agent runtime, SSE chat API)
-- [ ] Phase 4 — DX (module generator, docs, ตัวอย่างโมดูล)
+- [ ] Phase 4 — DX + Channel modules (`line_oa`, module generator, docs, ตัวอย่างโมดูล)
 - [ ] Phase 5 — Multi-tenant, admin UI
 
 ## Development
