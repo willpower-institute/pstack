@@ -8,7 +8,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq"
+os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server"
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 
@@ -427,6 +427,113 @@ def test_agent_chat_page(client):
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "AI Agent" in r.text
+
+
+def test_api_keys(client):
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # สร้าง key — plaintext แสดงครั้งเดียว
+    r = client.post("/api/keys", json={"name": "ci-bot"}, headers=headers)
+    assert r.status_code == 201, r.text
+    created = r.json()
+    api_key = created["key"]
+    assert api_key.startswith("psk_")
+
+    # ใช้ API key แทน JWT ได้ทุก endpoint
+    key_headers = {"Authorization": f"Bearer {api_key}"}
+    r = client.get("/api/users/me", headers=key_headers)
+    assert r.status_code == 200
+    assert r.json()["email"] == "admin@example.com"
+
+    # list ไม่มี plaintext — มีแค่ prefix
+    listed = client.get("/api/keys", headers=headers).json()
+    assert all("key" not in k for k in listed)
+    assert any(k["key_prefix"] == api_key[:12] for k in listed)
+
+    # revoke แล้วใช้ไม่ได้
+    r = client.delete(f"/api/keys/{created['id']}", headers=headers)
+    assert r.status_code == 204
+    assert client.get("/api/users/me", headers=key_headers).status_code == 401
+
+    # key มั่ว -> 401
+    assert (
+        client.get(
+            "/api/users/me", headers={"Authorization": "Bearer psk_invalid"}
+        ).status_code
+        == 401
+    )
+
+
+def _rpc(client, headers, method, params=None, rpc_id=1):
+    payload = {"jsonrpc": "2.0", "id": rpc_id, "method": method}
+    if params is not None:
+        payload["params"] = params
+    return client.post("/mcp", json=payload, headers=headers)
+
+
+def test_mcp_server(client):
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    api_key = client.post(
+        "/api/keys", json={"name": "mcp-client"}, headers=headers
+    ).json()["key"]
+    key_headers = {"Authorization": f"Bearer {api_key}"}
+
+    # ไม่มี token -> 401, GET -> 405
+    assert client.post("/mcp", json={}).status_code == 401
+    assert client.get("/mcp", headers=key_headers).status_code == 405
+
+    # initialize
+    r = _rpc(client, key_headers, "initialize", {"protocolVersion": "2025-06-18"})
+    result = r.json()["result"]
+    assert result["serverInfo"]["name"] == "pstack"
+    assert "tools" in result["capabilities"]
+
+    # notification -> 202 ตัวเปล่า
+    r = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        headers=key_headers,
+    )
+    assert r.status_code == 202
+
+    # tools/list — superuser เห็น tools จากหลายโมดูล
+    tools = {t["name"]: t for t in _rpc(client, key_headers, "tools/list").json()["result"]["tools"]}
+    assert "count_users" in tools and "search_faq" in tools
+    assert tools["search_faq"]["inputSchema"]["properties"]["query"]["type"] == "string"
+
+    # tools/call — รัน tool จริงบน DB
+    r = _rpc(client, key_headers, "tools/call", {"name": "count_users", "arguments": {}})
+    result = r.json()["result"]
+    assert result["isError"] is False
+    assert "ผู้ใช้" in result["content"][0]["text"]
+
+    # tool ที่ไม่มี/ไม่มีสิทธิ์ -> JSON-RPC error
+    r = _rpc(client, key_headers, "tools/call", {"name": "nope", "arguments": {}})
+    assert r.json()["error"]["code"] == -32602
+
+    # user ไม่มี role เห็นเฉพาะ tool สาธารณะ
+    user_token = client.post(
+        "/api/auth/login", json={"email": "somchai@example.com", "password": "pw1234"}
+    ).json()["access_token"]
+    user_key = client.post(
+        "/api/keys",
+        json={"name": "user-bot"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    ).json()["key"]
+    tools = {
+        t["name"]
+        for t in _rpc(
+            client, {"Authorization": f"Bearer {user_key}"}, "tools/list"
+        ).json()["result"]["tools"]
+    }
+    assert "search_faq" in tools
+    assert "count_users" not in tools
 
 
 def test_event_bus_local():

@@ -38,6 +38,8 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 | `ai_agent` | agent runtime (Claude `claude-opus-5` + refusal fallbacks), chat session ต่อ user, SSE streaming, เรียก tools ของโมดูลอื่นภายใต้สิทธิ์ RBAC ของผู้ใช้ |
 | `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, **LIFF**, account linking, quick-reply menu เป็น data, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
 | `faq` | **โมดูลตัวอย่าง** — หน้า HTML จาก templates ของโมดูล (`/faq`), REST API, AI tool สาธารณะ (`search_faq` — guest บน LINE ถามได้), seed data |
+| `api_keys` | long-lived API key (`psk_...`) สำหรับ machine/agent ภายนอก — hash เก็บ, revoke ได้, ใช้แทน JWT ได้ทุก endpoint |
+| `mcp_server` | เปิด tool registry ทั้งหมดให้ AI ภายนอกผ่าน **MCP** (`POST /mcp`, Streamable HTTP) — tools กรองตาม RBAC ของเจ้าของ token |
 
 ## Roadmap
 
@@ -141,6 +143,20 @@ curl -X POST localhost:8000/api/line/channels \
 **ผูกบัญชี:** user เรียก `POST /api/line/link-code` ได้โค้ด แล้วพิมพ์ `link <โค้ด>` ในแชท LINE — จากนั้น agent จะทำงานภายใต้สิทธิ์ RBAC ของ user คนนั้น (ยังไม่ผูก = guest ใช้ได้เฉพาะ tools สาธารณะ)
 
 **Broadcast:** `await enqueue("line_broadcast", channel_pk, "ข้อความ")` — ส่งผ่าน ARQ worker
+
+## ให้ AI ภายนอกต่อเข้าระบบ (MCP)
+
+1. สร้าง API key: `POST /api/keys {"name":"my-agent"}` — ได้ `psk_...` (แสดงครั้งเดียว, revoke ได้ที่ `DELETE /api/keys/{id}`)
+2. ต่อจาก Claude Code:
+
+```bash
+claude mcp add pstack --transport http https://<โดเมน>/mcp \
+  --header "Authorization: Bearer psk_xxx"
+```
+
+AI ภายนอกจะเห็น **tools ชุดเดียวกับ agent ภายใน** กรองตามสิทธิ์ RBAC ของ user เจ้าของ key — โมดูลใหม่เพิ่ม `@agent_tool` ปุ๊บ MCP client เห็นทันที ไม่ต้องแก้อะไร
+
+(อีกทางที่ใช้ได้เลย: agent ภายนอกคุยกับ agent ของเราเป็นภาษาคนผ่าน `POST /api/agent/sessions/{id}/messages` โดย auth ด้วย API key เดียวกัน)
 
 เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต
 

@@ -59,7 +59,19 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
     if ctx.user_loader is None:
         raise HTTPException(status_code=500, detail="no user module installed")
-    user_id = decode_access_token(credentials.credentials)
+    token = credentials.credentials
+
+    # โมดูลอาจเสียบวิธี auth เพิ่ม (เช่น API key) — ลองก่อน แล้วค่อย fallback เป็น JWT
+    for resolver in ctx.token_resolvers:
+        user = await resolver(session, token)
+        if user is not None:
+            if not getattr(user, "is_active", False):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="user not active"
+                )
+            return user
+
+    user_id = decode_access_token(token)
     user = await ctx.user_loader(session, user_id)
     if user is None or not getattr(user, "is_active", False):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")

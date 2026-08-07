@@ -29,6 +29,9 @@ class AppContext:
         self.jinja_env: Environment | None = None
         # โมดูล users ลงทะเบียน loader นี้ให้ core.auth ใช้หา user จาก token
         self.user_loader: Callable[[AsyncSession, int], Awaitable[Any]] | None = None
+        # โมดูลเสียบวิธี auth เพิ่มได้ (เช่น API key): async fn(session, token) -> user | None
+        # core.auth ลองทีละตัวก่อน fallback เป็น JWT
+        self.token_resolvers: list[Callable[[AsyncSession, str], Awaitable[Any]]] = []
 
 
 ctx = AppContext()
