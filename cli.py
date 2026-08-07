@@ -58,6 +58,62 @@ async def _fetch_installed() -> dict[str, str]:
         await dispose_engine()
 
 
+@app.command()
+def makemigration(
+    module: str,
+    message: str = typer.Option("update", "-m", "--message"),
+) -> None:
+    """สร้าง alembic revision จาก diff ของ models โมดูลนั้นเทียบกับ DB"""
+    from core.app import create_app
+
+    create_app()  # import ทุกโมดูล -> metadata + info.tables พร้อม
+
+    from core.db import dispose_engine, get_engine
+    from core.runtime import ctx
+
+    info = next((m for m in ctx.load_order if m.name == module), None)
+    if info is None:
+        typer.secho(
+            f"โมดูล '{module}' ไม่อยู่ใน PSTACK_MODULES — เพิ่มใน .env ก่อน", fg="red"
+        )
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        from core import migrations
+
+        try:
+            await migrations.autogenerate(get_engine(), info, message)
+        finally:
+            await dispose_engine()
+
+    asyncio.run(_run())
+    typer.secho(f"สร้าง revision ใหม่ใน addons/{module}/migrations/versions/", fg="green")
+
+
+@app.command()
+def migrate() -> None:
+    """apply migrations + install/upgrade ทุกโมดูลตาม PSTACK_MODULES (เหมือนตอนบูต app)"""
+    from core.app import create_app
+
+    create_app()
+
+    from core.db import dispose_engine, get_engine, get_sessionmaker
+    from core.registry import create_core_tables, sync_modules
+    from core.runtime import ctx
+
+    async def _run() -> None:
+        engine = get_engine()
+        try:
+            await create_core_tables(engine)
+            async with get_sessionmaker()() as session:
+                await sync_modules(engine, session, ctx.load_order)
+        finally:
+            await dispose_engine()
+
+    asyncio.run(_run())
+    typer.secho("migrate เสร็จ", fg="green")
+
+
 MANIFEST_TMPL = '''{{
     "name": "{name}",
     "version": "0.1.0",

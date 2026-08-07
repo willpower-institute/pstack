@@ -51,6 +51,16 @@ async def _create_module_tables(engine: AsyncEngine, info: ModuleInfo) -> None:
         await conn.run_sync(Base.metadata.create_all, tables=tables, checkfirst=True)
 
 
+async def _apply_schema(engine: AsyncEngine, info: ModuleInfo) -> None:
+    """โมดูลที่มี migrations/ ใช้ alembic; ไม่มีก็ fallback เป็น create-table"""
+    from core import migrations
+
+    if migrations.has_migrations(info):
+        await migrations.upgrade_to_head(engine, info)
+    else:
+        await _create_module_tables(engine, info)
+
+
 async def sync_modules(
     engine: AsyncEngine, session: AsyncSession, load_order: list[ModuleInfo]
 ) -> None:
@@ -58,7 +68,7 @@ async def sync_modules(
         record = await session.get(ModuleRecord, info.name)
         if record is None:
             logger.info("installing module '%s' %s", info.name, info.version)
-            await _create_module_tables(engine, info)
+            await _apply_schema(engine, info)
             if info.hooks and hasattr(info.hooks, "on_install"):
                 await info.hooks.on_install(session)
             session.add(ModuleRecord(name=info.name, version=info.version))
@@ -67,11 +77,17 @@ async def sync_modules(
             logger.info(
                 "upgrading module '%s' %s -> %s", info.name, record.version, info.version
             )
-            await _create_module_tables(engine, info)  # ตารางใหม่ที่เพิ่มมา
+            await _apply_schema(engine, info)
             if info.hooks and hasattr(info.hooks, "on_upgrade"):
                 await info.hooks.on_upgrade(session, record.version)
             record.version = info.version
             await session.commit()
+        else:
+            # version เท่าเดิม — ยัง upgrade_to_head เผื่อมี revision ใหม่ใน version เดียวกัน
+            from core import migrations
+
+            if migrations.has_migrations(info):
+                await migrations.upgrade_to_head(engine, info)
 
 
 async def installed_modules(session: AsyncSession) -> list[ModuleRecord]:

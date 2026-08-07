@@ -36,6 +36,10 @@ class ModuleError(Exception):
     pass
 
 
+# module name -> รายชื่อตาราง (คงอยู่ตลอดโปรเซส — import ซ้ำแล้ว diff metadata จะว่าง)
+_module_tables_cache: dict[str, list[str]] = {}
+
+
 @dataclass
 class ModuleInfo:
     name: str
@@ -116,10 +120,17 @@ def _import_submodule(info: ModuleInfo, name: str) -> ModuleType | None:
 def load_module(app: FastAPI, info: ModuleInfo) -> None:
     """Import โมดูลและลงทะเบียนทุก extension point (ไม่แตะ DB — ส่วน DB อยู่ใน registry)"""
     # snapshot ก่อน import ทั้ง package — โมดูลอาจ import models ทางอ้อมตั้งแต่ __init__
-    before = set(Base.metadata.tables)
-    importlib.import_module(info.package)
-    _import_submodule(info, "models")
-    info.tables = sorted(set(Base.metadata.tables) - before)
+    # (cache ไว้เพราะ import ครั้งที่สองในโปรเซสเดิม diff จะว่างเปล่า)
+    if info.name in _module_tables_cache:
+        importlib.import_module(info.package)
+        _import_submodule(info, "models")
+        info.tables = _module_tables_cache[info.name]
+    else:
+        before = set(Base.metadata.tables)
+        importlib.import_module(info.package)
+        _import_submodule(info, "models")
+        info.tables = sorted(set(Base.metadata.tables) - before)
+        _module_tables_cache[info.name] = info.tables
 
     routes = _import_submodule(info, "routes")
     if routes is not None:
@@ -129,6 +140,7 @@ def load_module(app: FastAPI, info: ModuleInfo) -> None:
         app.include_router(router)
 
     _import_submodule(info, "tools")
+    _import_submodule(info, "jobs")
     info.hooks = _import_submodule(info, "hooks")
 
     static_dir = info.path / "static"

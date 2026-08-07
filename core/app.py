@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
     engine = get_engine()
     await create_core_tables(engine)
     async with get_sessionmaker()() as session:
         await sync_modules(engine, session, ctx.load_order)
+    await ctx.events.connect_redis(settings.redis_url)
     logger.info(
         "pstack ready — modules: %s", ", ".join(m.name for m in ctx.load_order) or "(none)"
     )
     yield
+    from core.jobs import close_pool
+
+    await ctx.events.close()
+    await close_pool()
     await dispose_engine()
 
 

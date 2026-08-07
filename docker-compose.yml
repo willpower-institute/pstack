@@ -6,6 +6,8 @@ services:
     env_file: .env
     ports:
       - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -15,6 +17,22 @@ services:
       - default
       # deploy จริงบนเซิร์ฟเวอร์ (หลัง Caddy) ให้เปิดบรรทัดล่างและลบ ports: ด้านบน
       # - odoo-public
+
+  worker:
+    build: .
+    container_name: pstack-worker
+    restart: unless-stopped
+    command: arq core.worker.WorkerSettings
+    env_file: .env
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - default
 
   db:
     image: postgres:16-alpine
@@ -43,6 +61,7 @@ services:
 
 volumes:
   pgdata:
+  uploads:
 
 networks:
   default:

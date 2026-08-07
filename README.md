@@ -41,8 +41,8 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 ## Roadmap
 
 - [x] Phase 0 — Scaffold (โครงโปรเจกต์, docker-compose)
-- [x] Phase 1 — Kernel (module loader, manifest, registry, CLI) — *Alembic per-module migration ยังเป็น create-table-on-install จะเสริมใน Phase 2*
-- [ ] Phase 2 — Core modules (users/auth/RBAC, storage, event bus)
+- [x] Phase 1 — Kernel (module loader, manifest, registry, CLI)
+- [x] Phase 2 — Alembic per-module migrations, `storage`, Redis event bus, ARQ background jobs
 - [ ] Phase 3 — AI Agent module (tool registry, agent runtime, SSE chat API)
 - [ ] Phase 4 — DX + Channel modules (`line_oa`, module generator, docs, ตัวอย่างโมดูล)
 - [ ] Phase 5 — Multi-tenant, admin UI
@@ -63,6 +63,8 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 # CLI
 python cli.py modules                  # ดูโมดูลทั้งหมด + สถานะติดตั้ง
 python cli.py new-module <name>        # สร้างโครง addon ใหม่
+python cli.py makemigration <module> -m "..."   # สร้าง alembic revision ของโมดูล
+python cli.py migrate                  # apply migrations + install/upgrade ทุกโมดูล
 ```
 
 Login แรก: `admin@example.com` / `admin` (ตั้งค่าผ่าน `PSTACK_ADMIN_EMAIL`/`PSTACK_ADMIN_PASSWORD` — เปลี่ยนใน production)
@@ -72,13 +74,19 @@ Login แรก: `admin@example.com` / `admin` (ตั้งค่าผ่า�
 ```
 addons/<name>/
 ├── __manifest__.py   # dict literal: name, version, depends
-├── models.py         # SQLAlchemy models (สร้างตารางอัตโนมัติตอน install)
+├── models.py         # SQLAlchemy models
 ├── routes.py         # ต้องมีตัวแปร router: APIRouter
 ├── services.py       # business logic
 ├── tools.py          # @agent_tool — expose ให้ AI agent
+├── jobs.py           # @background_job — งานเบื้องหลังผ่าน ARQ worker
 ├── hooks.py          # on_install(session) / on_upgrade(session, from_version)
+├── migrations/       # alembic ต่อโมดูล (สร้างด้วย cli makemigration; ไม่มีก็ create-table ให้)
 ├── templates/        # Jinja2 อ้างแบบ "<name>/page.html"
 └── static/           # mount ที่ /static/<name>/
 ```
+
+**Schema เปลี่ยน?** แก้ models.py แล้ว `python cli.py makemigration <module> -m "คำอธิบาย"` — แต่ละโมดูลมี lineage และ version table ของตัวเอง (`alembic_version_<module>`) ไม่ชนกัน
+
+**Event ข้ามโมดูล/ข้ามโปรเซส:** `ctx.events.on("users.created")` / `await ctx.events.emit(..., broadcast=True)` (broadcast ผ่าน Redis ไปถึง worker ด้วย)
 
 เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต ดูตัวอย่างเต็มที่ `addons/users/`
