@@ -2,10 +2,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from addons.ai_agent.models import AgentMessage, AgentSession
 from core.ai import get_tools
 from core.ai.tools import ToolDef
-
-from addons.ai_agent.models import AgentMessage, AgentSession
 
 
 async def create_session(session: AsyncSession, user_id: int, title: str = "") -> AgentSession:

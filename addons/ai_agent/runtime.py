@@ -14,10 +14,9 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from addons.ai_agent.config import get_ai_settings
 from core.ai.tools import ToolDef
 from core.db import get_sessionmaker
-
-from addons.ai_agent.config import get_ai_settings
 
 logger = logging.getLogger(__name__)
 

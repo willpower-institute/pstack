@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pstack — AI Agent</title>
+  <style>
+    :root { --accent: #4a5fc1; --bg: #f4f5fa; --ink: #26293a; --me: #dfe6ff; --bot: #ffffff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+           background: var(--bg); color: var(--ink); height: 100vh; display: flex; flex-direction: column; }
+    header { padding: .9rem 1.25rem; background: #fff; border-bottom: 1px solid #e3e4ee;
+             display: flex; align-items: center; gap: .6rem; }
+    header b { color: var(--accent); }
+    #status { font-size: .8rem; color: #888; margin-left: auto; }
+    main { flex: 1; overflow-y: auto; padding: 1.25rem; }
+    .msg { max-width: 46rem; margin: 0 auto .7rem; padding: .7rem 1rem; border-radius: 12px;
+           line-height: 1.65; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .me  { background: var(--me); margin-left: auto; margin-right: 0; max-width: 34rem; }
+    .bot { background: var(--bot); }
+    .tool { max-width: 46rem; margin: 0 auto .7rem; font-size: .78rem; color: #7a7f96; }
+    footer { padding: .9rem 1.25rem 1.2rem; background: #fff; border-top: 1px solid #e3e4ee; }
+    form, .loginrow { max-width: 46rem; margin: 0 auto; display: flex; gap: .5rem; }
+    input, button { font: inherit; }
+    input { flex: 1; padding: .65rem .9rem; border: 1px solid #cfd2e3; border-radius: 10px; }
+    button { padding: .65rem 1.2rem; border: 0; border-radius: 10px; background: var(--accent);
+             color: #fff; cursor: pointer; }
+    button:disabled { opacity: .5; }
+    #login { display: flex; }  #chatbar { display: none; }
+  </style>
+</head>
+<body>
+  <header><b>◆ pstack</b> AI Agent <span id="status"></span></header>
+  <main id="log"></main>
+  <footer>
+    <div class="loginrow" id="login">
+      <input id="email" placeholder="อีเมล" value="">
+      <input id="password" type="password" placeholder="รหัสผ่าน">
+      <button onclick="login()">เข้าสู่ระบบ</button>
+    </div>
+    <form id="chatbar" onsubmit="send(event)">
+      <input id="text" placeholder="พิมพ์ข้อความ..." autocomplete="off">
+      <button id="sendbtn">ส่ง</button>
+    </form>
+  </footer>
+
+<script>
+let token = null, sid = null;
+const $ = (id) => document.getElementById(id);
+
+function add(cls, text) {
+  const el = document.createElement("div");
+  el.className = cls;
+  el.textContent = text;
+  $("log").appendChild(el);
+  $("log").scrollTop = $("log").scrollHeight;
+  return el;
+}
+
+async function login() {
+  const r = await fetch("/api/auth/login", {
+    method: "POST", headers: {"content-type": "application/json"},
+    body: JSON.stringify({email: $("email").value, password: $("password").value}),
+  });
+  if (!r.ok) { $("status").textContent = "เข้าสู่ระบบไม่สำเร็จ"; return; }
+  token = (await r.json()).access_token;
+  const s = await fetch("/api/agent/sessions", {
+    method: "POST",
+    headers: {"content-type": "application/json", authorization: "Bearer " + token},
+    body: "{}",
+  });
+  sid = (await s.json()).id;
+  $("login").style.display = "none";
+  $("chatbar").style.display = "flex";
+  $("status").textContent = "พร้อมคุย (session #" + sid + ")";
+  $("text").focus();
+}
+
+async function send(ev) {
+  ev.preventDefault();
+  const text = $("text").value.trim();
+  if (!text) return;
+  $("text").value = "";
+  $("sendbtn").disabled = true;
+  add("msg me", text);
+  let bot = null;
+
+  const r = await fetch(`/api/agent/sessions/${sid}/messages`, {
+    method: "POST",
+    headers: {"content-type": "application/json", authorization: "Bearer " + token},
+    body: JSON.stringify({text}),
+  });
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, {stream: true});
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      if (!chunk.startsWith("data: ")) continue;
+      const ev = JSON.parse(chunk.slice(6));
+      if (ev.type === "text") {
+        if (!bot) bot = add("msg bot", "");
+        bot.textContent += ev.delta;
+        $("log").scrollTop = $("log").scrollHeight;
+      } else if (ev.type === "tool_use") {
+        add("tool", "🔧 เรียก " + ev.name + "...");
+        bot = null;   // ข้อความหลัง tool เป็น bubble ใหม่
+      } else if (ev.type === "error") {
+        add("tool", "⚠️ " + (ev.detail || ev.error));
+      }
+    }
+  }
+  $("sendbtn").disabled = false;
+  $("text").focus();
+}
+</script>
+</body>
+</html>

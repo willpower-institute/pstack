@@ -3,10 +3,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.ai import agent_tool
-
 from addons.users import services
 from addons.users.models import User
+from core.ai import agent_tool
 
 
 @agent_tool(module="users", permission="users.read")

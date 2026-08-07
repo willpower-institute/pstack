@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, String, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -27,12 +27,12 @@ class ModuleRecord(Base):
     name: Mapped[str] = mapped_column(String(64), primary_key=True)
     version: Mapped[str] = mapped_column(String(32))
     installed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 

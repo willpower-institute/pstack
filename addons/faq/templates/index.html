@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>คำถามที่พบบ่อย</title>
+  <style>
+    :root { --accent: #1a7f5a; --bg: #f7f6f2; --card: #ffffff; --ink: #23302b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+           background: var(--bg); color: var(--ink); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
+    h1 span { color: var(--accent); }
+    details { background: var(--card); border-radius: 10px; margin-bottom: .75rem;
+              box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    summary { padding: 1rem 1.25rem; font-weight: 600; cursor: pointer; }
+    details p { margin: 0; padding: 0 1.25rem 1.1rem; line-height: 1.7; white-space: pre-line; }
+    .empty { color: #777; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><span>❓</span> คำถามที่พบบ่อย</h1>
+    {% for faq in faqs %}
+    <details {% if loop.first %}open{% endif %}>
+      <summary>{{ faq.question }}</summary>
+      <p>{{ faq.answer }}</p>
+    </details>
+    {% else %}
+    <p class="empty">ยังไม่มีคำถามในระบบ</p>
+    {% endfor %}
+  </div>
+</body>
+</html>

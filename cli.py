@@ -132,6 +132,20 @@ async def ping() -> dict:
     return {{"module": "{name}", "status": "ok"}}
 '''
 
+TOOLS_TMPL = '''"""AI tools ของโมดูล — ลบไฟล์นี้ได้ถ้าไม่ต้องการ expose อะไรให้ agent
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.ai import agent_tool
+
+
+@agent_tool(module="{name}", permission="{name}.read")   # permission=None = สาธารณะ (guest LINE ใช้ได้)
+async def search_{name}(session: AsyncSession, query: str) -> str:
+    \"\"\"คำอธิบายนี้คือสิ่งที่ agent ใช้ตัดสินใจเรียก tool\"\"\"
+    ...
+"""
+'''
+
 HOOKS_TMPL = '''from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -160,6 +174,7 @@ def new_module(name: str, addons_path: str = "addons") -> None:
     (target / "__manifest__.py").write_text(MANIFEST_TMPL.format(name=name))
     (target / "models.py").write_text("from core.db import Base  # noqa: F401\n")
     (target / "routes.py").write_text(ROUTES_TMPL.format(name=name))
+    (target / "tools.py").write_text(TOOLS_TMPL.format(name=name))
     (target / "hooks.py").write_text(HOOKS_TMPL)
     (target / "templates").mkdir()
     (target / "static").mkdir()

@@ -5,13 +5,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import get_current_user, require_permission
-from core.db import get_session
-
 from addons.line_oa import bridge, services
 from addons.line_oa.client import verify_signature
 from addons.line_oa.config import get_line_settings
 from addons.line_oa.models import LineChannel
+from core.auth import get_current_user, require_permission
+from core.db import get_session
 
 router = APIRouter(prefix="/api/line", tags=["line_oa"])
 

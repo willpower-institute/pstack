@@ -2,9 +2,8 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import get_settings
-
 from addons.users import services
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 

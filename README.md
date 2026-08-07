@@ -37,6 +37,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 | `storage` | file upload / object storage |
 | `ai_agent` | agent runtime (Claude `claude-opus-5` + refusal fallbacks), chat session ต่อ user, SSE streaming, เรียก tools ของโมดูลอื่นภายใต้สิทธิ์ RBAC ของผู้ใช้ |
 | `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, **LIFF**, account linking, quick-reply menu เป็น data, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
+| `faq` | **โมดูลตัวอย่าง** — หน้า HTML จาก templates ของโมดูล (`/faq`), REST API, AI tool สาธารณะ (`search_faq` — guest บน LINE ถามได้), seed data |
 
 ## Roadmap
 
@@ -45,7 +46,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 2 — Alembic per-module migrations, `storage`, Redis event bus, ARQ background jobs
 - [x] Phase 3 — AI Agent module (agent runtime บน Claude, SSE chat API, RBAC-scoped tools)
 - [x] Phase 4 — `line_oa` (webhook หลาย channel, account linking, agent bridge), module generator
-- [ ] Phase 4.5 — DX (docs, ตัวอย่างโมดูล business, UI ตัวอย่าง)
+- [x] Phase 4.5 — DX: โมดูลตัวอย่าง `faq`, หน้าแชท `/agent`, [MODULE_GUIDE](docs/MODULE_GUIDE.md), CI
 - [ ] Phase 5 — Multi-tenant, admin UI
 
 ## Development
@@ -141,4 +142,8 @@ curl -X POST localhost:8000/api/line/channels \
 
 **Broadcast:** `await enqueue("line_broadcast", channel_pk, "ข้อความ")` — ส่งผ่าน ARQ worker
 
-เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต ดูตัวอย่างเต็มที่ `addons/users/`
+เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต
+
+📖 **คู่มือเต็ม: [docs/MODULE_GUIDE.md](docs/MODULE_GUIDE.md)** — เดินทีละขั้นพร้อมชี้ตัวอย่างจริง (โมดูล `faq` ตั้งใจเขียนไว้เป็นตัวอย่างครบทุก pattern)
+
+**ลองเล่นเร็วสุด:** `docker compose up -d --build` แล้วเปิด `http://localhost:8000/agent` (หน้าแชทกับ AI) และ `http://localhost:8000/faq` (หน้า HTML จากโมดูลตัวอย่าง)

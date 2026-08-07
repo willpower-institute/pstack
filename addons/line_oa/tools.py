@@ -3,11 +3,10 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.ai import agent_tool
-
 from addons.line_oa import client as line_client
 from addons.line_oa.models import LineChannel, LineUser
 from addons.users.models import User
+from core.ai import agent_tool
 
 
 @agent_tool(module="line_oa", permission="line_oa.push")

@@ -5,7 +5,7 @@ kernel ไม่รู้จักตาราง user — โมดูล users
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 import bcrypt
@@ -34,7 +34,7 @@ def create_access_token(user_id: int) -> str:
     settings = get_settings()
     payload = {
         "sub": str(user_id),
-        "exp": datetime.now(timezone.utc)
+        "exp": datetime.now(UTC)
         + timedelta(minutes=settings.access_token_expire_minutes),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)

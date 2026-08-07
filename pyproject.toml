@@ -39,3 +39,14 @@ packages = ["core", "core.ai", "addons"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # except Exception — ตั้งใจใช้ในจุด resilience (event bus, webhook, tool exec)
+    "RUF012",  # WorkerSettings.functions เป็น convention ของ arq
+    "C408",    # dict(...) อ่านง่ายกว่าในบางจุด
+    "ISC004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__manifest__.py" = ["B018"]  # manifest คือ dict literal ลอยๆ โดยตั้งใจ

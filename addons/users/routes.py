@@ -5,11 +5,10 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import create_access_token, get_current_user, require_permission
-from core.db import get_session
-
 from addons.users import services
 from addons.users.models import User
+from core.auth import create_access_token, get_current_user, require_permission
+from core.db import get_session
 
 router = APIRouter(tags=["users"])
 

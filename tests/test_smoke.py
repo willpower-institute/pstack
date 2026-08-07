@@ -8,7 +8,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa"
+os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq"
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 
@@ -239,7 +239,7 @@ def _line_post(client, channel_id, secret, payload):
     )
 
 
-import json  # noqa: E402
+import json
 
 
 @pytest.fixture(scope="module")
@@ -386,6 +386,47 @@ def test_line_agent_bridge(client, line_capture, monkeypatch):
         "/api/agent/sessions", headers={"Authorization": f"Bearer {admin_token}"}
     ).json()
     assert any(s["title"].startswith("LINE:") for s in sessions)
+
+
+def test_faq_module(client):
+    # หน้า HTML จาก templates ของโมดูล (kernel templating)
+    r = client.get("/faq")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "คำถามที่พบบ่อย" in r.text
+    assert "ระบบนี้คืออะไร" in r.text  # seed จาก on_install
+
+    # API สาธารณะ
+    faqs = client.get("/api/faq").json()
+    assert len(faqs) >= 2
+
+    # สร้างต้องมีสิทธิ์ faq.manage — user ธรรมดาโดน 403
+    user_token = client.post(
+        "/api/auth/login", json={"email": "somchai@example.com", "password": "pw1234"}
+    ).json()["access_token"]
+    r = client.post(
+        "/api/faq",
+        json={"question": "x", "answer": "y"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert r.status_code == 403
+
+    # tool สาธารณะ: user ไม่มี role ก็เห็น search_faq (แต่ไม่เห็น count_users)
+    tools = {
+        t["name"]
+        for t in client.get(
+            "/api/agent/tools", headers={"Authorization": f"Bearer {user_token}"}
+        ).json()
+    }
+    assert "search_faq" in tools
+    assert "count_users" not in tools
+
+
+def test_agent_chat_page(client):
+    r = client.get("/agent")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "AI Agent" in r.text
 
 
 def test_event_bus_local():

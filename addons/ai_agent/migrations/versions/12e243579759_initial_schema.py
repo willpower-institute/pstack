@@ -4,9 +4,8 @@ Revision ID: 12e243579759
 Revises: 
 Create Date: 2026-08-07 14:04:52.328373
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = '12e243579759'
 down_revision = None

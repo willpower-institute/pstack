@@ -1,10 +1,9 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from addons.users.models import User
 from core.auth import hash_password, verify_password
 from core.runtime import ctx
-
-from addons.users.models import User
 
 
 async def load_user(session: AsyncSession, user_id: int) -> User | None:

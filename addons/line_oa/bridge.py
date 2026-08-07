@@ -13,9 +13,6 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from core.db import get_sessionmaker
-from core.runtime import ctx
-
 from addons.ai_agent import services as agent_services
 from addons.ai_agent.runtime import build_system_prompt, get_runtime
 from addons.line_oa import client as line_client
@@ -23,6 +20,8 @@ from addons.line_oa import services
 from addons.line_oa.config import get_line_settings
 from addons.line_oa.models import LineChannel, LineUser
 from addons.users.models import User
+from core.db import get_sessionmaker
+from core.runtime import ctx
 
 logger = logging.getLogger(__name__)
 

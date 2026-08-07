@@ -1,15 +1,14 @@
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import hash_password
-
 from addons.line_oa.config import get_line_settings
 from addons.line_oa.models import LineChannel, LineLinkCode, LineUser
 from addons.users.models import User
+from core.auth import hash_password
 
 GUEST_EMAIL = "line-guest@pstack.local"
 
@@ -65,7 +64,7 @@ async def create_link_code(session: AsyncSession, user_id: int) -> LineLinkCode:
     record = LineLinkCode(
         code=code,
         user_id=user_id,
-        expires_at=datetime.now(timezone.utc)
+        expires_at=datetime.now(UTC)
         + timedelta(minutes=settings.link_code_ttl_minutes),
     )
     session.add(record)
@@ -85,8 +84,8 @@ async def redeem_link_code(
         return None
     expires = record.expires_at
     if expires.tzinfo is None:  # sqlite เก็บ naive datetime
-        expires = expires.replace(tzinfo=timezone.utc)
-    if expires < datetime.now(timezone.utc):
+        expires = expires.replace(tzinfo=UTC)
+    if expires < datetime.now(UTC):
         await session.delete(record)
         await session.commit()
         return None

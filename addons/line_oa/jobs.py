@@ -4,11 +4,10 @@ import logging
 
 from sqlalchemy import select
 
-from core.db import get_sessionmaker
-from core.jobs import background_job
-
 from addons.line_oa import client as line_client
 from addons.line_oa.models import LineChannel, LineUser
+from core.db import get_sessionmaker
+from core.jobs import background_job
 
 logger = logging.getLogger(__name__)
 
