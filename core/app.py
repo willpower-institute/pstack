@@ -1,0 +1,65 @@
+"""FastAPI application factory + lifespan
+
+create_app():
+  1. discover addons + resolve dependency order จาก PSTACK_MODULES
+  2. import ทุกโมดูล + mount routers/static/templates/tools  (ยังไม่แตะ DB)
+lifespan (ตอน start ก่อนรับ request):
+  3. สร้างตาราง registry -> install/upgrade โมดูลตามลำดับ (สร้างตาราง + hooks)
+"""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from core.config import get_settings
+from core.db import dispose_engine, get_engine, get_sessionmaker
+from core.loader import discover, load_module, resolve_order
+from core.registry import create_core_tables, sync_modules
+from core.runtime import ctx
+from core.templating import build_template_env
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    engine = get_engine()
+    await create_core_tables(engine)
+    async with get_sessionmaker()() as session:
+        await sync_modules(engine, session, ctx.load_order)
+    logger.info(
+        "pstack ready — modules: %s", ", ".join(m.name for m in ctx.load_order) or "(none)"
+    )
+    yield
+    await dispose_engine()
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(title=settings.app_name, lifespan=lifespan, debug=settings.debug)
+    ctx.app = app
+    ctx.settings = settings
+
+    ctx.modules = discover(settings.addons_paths_list)
+    order = resolve_order(settings.modules_list, ctx.modules)
+    ctx.load_order = [ctx.modules[name] for name in order]
+
+    for info in ctx.load_order:
+        logger.info("loading module '%s' %s", info.name, info.version)
+        load_module(app, info)
+
+    build_template_env(ctx.load_order)
+
+    @app.get("/healthz")
+    async def healthz() -> dict:
+        return {
+            "status": "ok",
+            "app": settings.app_name,
+            "modules": [m.name for m in ctx.load_order],
+        }
+
+    return app

@@ -1,0 +1,51 @@
+services:
+  app:
+    build: .
+    container_name: pstack-app
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - default
+      # deploy จริงบนเซิร์ฟเวอร์ (หลัง Caddy) ให้เปิดบรรทัดล่างและลบ ports: ด้านบน
+      # - odoo-public
+
+  db:
+    image: postgres:16-alpine
+    container_name: pstack-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pstack-redis
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    name: pstack_default
+  # odoo-public:
+  #   external: true

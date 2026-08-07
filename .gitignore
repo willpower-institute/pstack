@@ -27,4 +27,5 @@ htmlcov/
 
 # Data
 *.sqlite3
+*.db
 /data/
