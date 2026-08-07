@@ -35,7 +35,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 |---|---|
 | `users` | auth (JWT), RBAC, user management |
 | `storage` | file upload / object storage |
-| `ai_agent` | tool registry, agent runtime (Claude), SSE chat API |
+| `ai_agent` | agent runtime (Claude `claude-opus-5` + refusal fallbacks), chat session ต่อ user, SSE streaming, เรียก tools ของโมดูลอื่นภายใต้สิทธิ์ RBAC ของผู้ใช้ |
 | `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, **LIFF**, account linking, quick-reply menu เป็น data, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
 
 ## Roadmap
@@ -43,7 +43,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 0 — Scaffold (โครงโปรเจกต์, docker-compose)
 - [x] Phase 1 — Kernel (module loader, manifest, registry, CLI)
 - [x] Phase 2 — Alembic per-module migrations, `storage`, Redis event bus, ARQ background jobs
-- [ ] Phase 3 — AI Agent module (tool registry, agent runtime, SSE chat API)
+- [x] Phase 3 — AI Agent module (agent runtime บน Claude, SSE chat API, RBAC-scoped tools)
 - [ ] Phase 4 — DX + Channel modules (`line_oa`, module generator, docs, ตัวอย่างโมดูล)
 - [ ] Phase 5 — Multi-tenant, admin UI
 
@@ -88,5 +88,37 @@ addons/<name>/
 **Schema เปลี่ยน?** แก้ models.py แล้ว `python cli.py makemigration <module> -m "คำอธิบาย"` — แต่ละโมดูลมี lineage และ version table ของตัวเอง (`alembic_version_<module>`) ไม่ชนกัน
 
 **Event ข้ามโมดูล/ข้ามโปรเซส:** `ctx.events.on("users.created")` / `await ctx.events.emit(..., broadcast=True)` (broadcast ผ่าน Redis ไปถึง worker ด้วย)
+
+## ใช้งาน AI Agent
+
+ตั้ง `ANTHROPIC_API_KEY` ใน `.env` แล้ว:
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin"}' | jq -r .access_token)
+
+SID=$(curl -s -X POST localhost:8000/api/agent/sessions \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{}' | jq -r .id)
+
+# แชท (ตอบเป็น SSE stream) — agent เรียก tools ได้เฉพาะที่ user มีสิทธิ์
+curl -N -X POST localhost:8000/api/agent/sessions/$SID/messages \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"text":"ตอนนี้มีผู้ใช้กี่คน"}'
+
+curl -s localhost:8000/api/agent/tools -H "authorization: Bearer $TOKEN"   # tools ที่ agent ใช้ได้
+```
+
+การเขียน tool ให้ agent — วางใน `addons/<module>/tools.py`:
+
+```python
+from core.ai import agent_tool
+
+@agent_tool(module="crm", permission="crm.read")
+async def search_customers(session, query: str) -> str:
+    """ค้นหาลูกค้าจากชื่อหรืออีเมล"""   # docstring = คำอธิบายที่ agent เห็น
+    ...
+```
 
 เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต ดูตัวอย่างเต็มที่ `addons/users/`

@@ -8,7 +8,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage"
+os.environ["PSTACK_MODULES"] = "users,storage,ai_agent"
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 
 import pytest
@@ -120,6 +120,102 @@ def test_storage_flow(client):
     assert r.status_code == 204
     r = client.get(f"/api/storage/{file_id}/download", headers=headers)
     assert r.status_code == 404
+
+
+class FakeStream:
+    """แทน anthropic streaming context — script การตอบของโมเดลทีละ turn"""
+
+    def __init__(self, deltas, final):
+        self._deltas = deltas
+        self._final = final
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    @property
+    def text_stream(self):
+        async def gen():
+            for d in self._deltas:
+                yield d
+
+        return gen()
+
+    async def get_final_message(self):
+        return self._final
+
+
+def test_agent_session_and_tools(client):
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/api/agent/sessions", json={"title": ""}, headers=headers)
+    assert r.status_code == 201
+    assert client.get("/api/agent/sessions", headers=headers).json()
+
+    # superuser เห็น tools ของโมดูล users
+    tools = client.get("/api/agent/tools", headers=headers).json()
+    names = {t["name"] for t in tools}
+    assert {"count_users", "search_users"} <= names
+
+
+def test_agent_chat_with_tool(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from addons.ai_agent.runtime import AgentRuntime
+
+    # turn 1: โมเดลขอเรียก count_users, turn 2: ตอบ text จบ
+    turns = [
+        FakeStream(
+            [],
+            SimpleNamespace(
+                content=[
+                    {"type": "tool_use", "id": "tu_1", "name": "count_users", "input": {}}
+                ],
+                stop_reason="tool_use",
+            ),
+        ),
+        FakeStream(
+            ["มีผู้ใช้ ", "2 คนครับ"],
+            SimpleNamespace(
+                content=[{"type": "text", "text": "มีผู้ใช้ 2 คนครับ"}],
+                stop_reason="end_turn",
+            ),
+        ),
+    ]
+    monkeypatch.setattr(
+        AgentRuntime, "_stream_ctx", lambda self, *, system, messages, tools: turns.pop(0)
+    )
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sid = client.post("/api/agent/sessions", json={}, headers=headers).json()["id"]
+    r = client.post(
+        f"/api/agent/sessions/{sid}/messages",
+        json={"text": "ตอนนี้มีผู้ใช้กี่คน"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert '"tool_use"' in body and '"count_users"' in body   # เรียก tool จริง
+    assert '"tool_result"' in body and '"ok": true' in body   # tool รันสำเร็จ
+    assert '"done"' in body
+
+    # ประวัติถูกเก็บ: ข้อความ user + คำตอบ assistant (แถว tool ไม่โชว์)
+    msgs = client.get(f"/api/agent/sessions/{sid}/messages", headers=headers).json()
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assert msgs[1]["text"] == "มีผู้ใช้ 2 คนครับ"
+
+    # session title ถูกตั้งจากข้อความแรก
+    sessions = client.get("/api/agent/sessions", headers=headers).json()
+    assert any(s["title"] == "ตอนนี้มีผู้ใช้กี่คน" for s in sessions)
 
 
 def test_event_bus_local():
