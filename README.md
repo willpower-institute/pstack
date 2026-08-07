@@ -5,8 +5,9 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 ## แนวคิด
 
 - **Kernel เล็ก + ทุกอย่างเป็นโมดูล** — module loader อ่าน `__manifest__.py`, จัดลำดับตาม `depends`, มี lifecycle install/upgrade/uninstall
-- **โมดูลลงทะเบียน extension points ได้** — routers, models, event handlers, permissions, background jobs และ **AI tools**
+- **โมดูลลงทะเบียน extension points ได้** — routers, models, **templates/static (server-rendered UI)**, event handlers, permissions, background jobs และ **AI tools**
 - **AI Agent เป็น first-class** — โมดูลไหนก็ expose tool ให้ agent เรียกใช้ได้ ภายใต้ RBAC ของ user
+- **รองรับการย้ายโปรเจกต์เดิม** — โปรเจกต์ FastAPI เดี่ยวๆ ย้ายมาเป็น addon หนึ่งตัวได้ ดู [docs/MIGRATION.md](docs/MIGRATION.md)
 
 ## Tech Stack
 
@@ -35,7 +36,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 | `users` | auth (JWT), RBAC, user management |
 | `storage` | file upload / object storage |
 | `ai_agent` | tool registry, agent runtime (Claude), SSE chat API |
-| `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, account linking, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
+| `line_oa` | LINE Official Account — webhook (verify signature), หลาย channel, **LIFF**, account linking, quick-reply menu เป็น data, push/flex message และ bridge เข้า AI agent (แชทบอท AI บน LINE ภายใต้สิทธิ์ของ user ที่ผูกไว้) |
 
 ## Roadmap
 
