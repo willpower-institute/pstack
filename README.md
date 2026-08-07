@@ -1,0 +1,45 @@
+# pstack
+
+Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้วยระบบโมดูลสไตล์ Odoo พร้อมโมดูล AI Agent ในตัว
+
+## แนวคิด
+
+- **Kernel เล็ก + ทุกอย่างเป็นโมดูล** — module loader อ่าน `__manifest__.py`, จัดลำดับตาม `depends`, มี lifecycle install/upgrade/uninstall
+- **โมดูลลงทะเบียน extension points ได้** — routers, models, event handlers, permissions, background jobs และ **AI tools**
+- **AI Agent เป็น first-class** — โมดูลไหนก็ expose tool ให้ agent เรียกใช้ได้ ภายใต้ RBAC ของ user
+
+## Tech Stack
+
+| ส่วน | ใช้ |
+|---|---|
+| Web | FastAPI + Pydantic v2 |
+| ORM | SQLAlchemy 2.0 (async) + Alembic |
+| Database | PostgreSQL |
+| Cache / Event | Redis |
+| Background jobs | ARQ |
+| AI | Anthropic SDK (Claude) |
+
+## โครงสร้าง
+
+```
+├── core/          # kernel: loader, registry, db, auth, events, jobs, ai
+├── addons/        # โมดูลทั้งหมด (users, storage, ai_agent, ...)
+├── cli.py         # pstack CLI
+└── docker-compose.yml
+```
+
+## Roadmap
+
+- [ ] Phase 0 — Scaffold (โครงโปรเจกต์, docker-compose)
+- [ ] Phase 1 — Kernel (module loader, manifest, registry, migrations, CLI)
+- [ ] Phase 2 — Core modules (users/auth/RBAC, storage, event bus)
+- [ ] Phase 3 — AI Agent module (tool registry, agent runtime, SSE chat API)
+- [ ] Phase 4 — DX (module generator, docs, ตัวอย่างโมดูล)
+- [ ] Phase 5 — Multi-tenant, admin UI
+
+## Development
+
+```bash
+# เริ่มพัฒนา (จะเพิ่มรายละเอียดใน Phase 0)
+docker compose up -d
+```
