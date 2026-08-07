@@ -8,8 +8,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage,ai_agent"
+os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa"
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
+os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 
 import pytest
 from fastapi.testclient import TestClient
@@ -216,6 +217,175 @@ def test_agent_chat_with_tool(client, monkeypatch):
     # session title ถูกตั้งจากข้อความแรก
     sessions = client.get("/api/agent/sessions", headers=headers).json()
     assert any(s["title"] == "ตอนนี้มีผู้ใช้กี่คน" for s in sessions)
+
+
+def _line_sign(secret: str, body: bytes) -> str:
+    import base64
+    import hashlib
+    import hmac
+
+    return base64.b64encode(hmac.new(secret.encode(), body, hashlib.sha256).digest()).decode()
+
+
+def _line_post(client, channel_id, secret, payload):
+    body = json.dumps(payload).encode()
+    return client.post(
+        f"/api/line/webhook/{channel_id}",
+        content=body,
+        headers={
+            "x-line-signature": _line_sign(secret, body),
+            "content-type": "application/json",
+        },
+    )
+
+
+import json  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def line_capture(client):
+    """สร้าง LINE channel + ดัก reply/push แทนการยิง LINE API จริง"""
+    import addons.line_oa.client as line_client
+
+    captured = {"reply": [], "push": []}
+    real_reply, real_push = line_client.reply, line_client.push
+
+    async def fake_reply(token, reply_token, messages):
+        captured["reply"].append(messages)
+        return True
+
+    async def fake_push(token, to, messages):
+        captured["push"].append(messages)
+        return True
+
+    line_client.reply = fake_reply
+    line_client.push = fake_push
+    yield captured
+    line_client.reply = real_reply
+    line_client.push = real_push
+
+
+def test_line_webhook_follow_and_link(client, line_capture):
+    admin_token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # สร้าง channel (ต้องมีสิทธิ์ line_oa.manage — superuser ผ่าน)
+    r = client.post(
+        "/api/line/channels",
+        json={
+            "name": "test OA",
+            "channel_id": "C0001",
+            "channel_secret": "sec-1",
+            "access_token": "tok-1",
+            "greeting": "สวัสดีครับ ยินดีต้อนรับ",
+            "quick_menu": [{"label": "เมนู", "url": "https://liff.line.me/xxx"}],
+        },
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+
+    # ลายเซ็นผิด -> 400
+    r = client.post(
+        "/api/line/webhook/C0001",
+        content=b"{}",
+        headers={"x-line-signature": "bad", "content-type": "application/json"},
+    )
+    assert r.status_code == 400
+
+    # follow -> ได้ greeting พร้อม quick reply
+    r = _line_post(
+        client,
+        "C0001",
+        "sec-1",
+        {"events": [{"type": "follow", "replyToken": "rt1", "source": {"userId": "U111"}}]},
+    )
+    assert r.status_code == 200
+    greeting = line_capture["reply"][-1][0]
+    assert "ยินดีต้อนรับ" in greeting["text"]
+    assert greeting["quickReply"]["items"][0]["action"]["label"] == "เมนู"
+
+    # ขอ link code แล้วพิมพ์ link <code> ใน LINE -> ผูกบัญชีสำเร็จ
+    code = client.post("/api/line/link-code", headers=headers).json()["code"]
+    _line_post(
+        client,
+        "C0001",
+        "sec-1",
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "rt2",
+                    "source": {"userId": "U111"},
+                    "message": {"type": "text", "text": f"link {code}"},
+                }
+            ]
+        },
+    )
+    assert "สำเร็จ" in line_capture["reply"][-1][0]["text"]
+
+    # โค้ดใช้ซ้ำไม่ได้
+    _line_post(
+        client,
+        "C0001",
+        "sec-1",
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "rt3",
+                    "source": {"userId": "U111"},
+                    "message": {"type": "text", "text": f"link {code}"},
+                }
+            ]
+        },
+    )
+    assert "ไม่ถูกต้อง" in line_capture["reply"][-1][0]["text"]
+
+
+def test_line_agent_bridge(client, line_capture, monkeypatch):
+    from types import SimpleNamespace
+
+    from addons.ai_agent.runtime import AgentRuntime
+
+    monkeypatch.setattr(
+        AgentRuntime,
+        "_stream_ctx",
+        lambda self, *, system, messages, tools: FakeStream(
+            ["ตอบจาก agent ครับ"],
+            SimpleNamespace(
+                content=[{"type": "text", "text": "ตอบจาก agent ครับ"}],
+                stop_reason="end_turn",
+            ),
+        ),
+    )
+
+    _line_post(
+        client,
+        "C0001",
+        "sec-1",
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "rt4",
+                    "source": {"userId": "U111"},
+                    "message": {"type": "text", "text": "ระบบนี้คืออะไร"},
+                }
+            ]
+        },
+    )
+    assert line_capture["reply"][-1][0]["text"] == "ตอบจาก agent ครับ"
+
+    # U111 ผูกกับ admin แล้ว -> agent session ต้องเป็นของ admin (title ขึ้นต้น LINE:)
+    admin_token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    sessions = client.get(
+        "/api/agent/sessions", headers={"Authorization": f"Bearer {admin_token}"}
+    ).json()
+    assert any(s["title"].startswith("LINE:") for s in sessions)
 
 
 def test_event_bus_local():

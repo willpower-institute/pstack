@@ -44,7 +44,8 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 1 — Kernel (module loader, manifest, registry, CLI)
 - [x] Phase 2 — Alembic per-module migrations, `storage`, Redis event bus, ARQ background jobs
 - [x] Phase 3 — AI Agent module (agent runtime บน Claude, SSE chat API, RBAC-scoped tools)
-- [ ] Phase 4 — DX + Channel modules (`line_oa`, module generator, docs, ตัวอย่างโมดูล)
+- [x] Phase 4 — `line_oa` (webhook หลาย channel, account linking, agent bridge), module generator
+- [ ] Phase 4.5 — DX (docs, ตัวอย่างโมดูล business, UI ตัวอย่าง)
 - [ ] Phase 5 — Multi-tenant, admin UI
 
 ## Development
@@ -120,5 +121,24 @@ async def search_customers(session, query: str) -> str:
     """ค้นหาลูกค้าจากชื่อหรืออีเมล"""   # docstring = คำอธิบายที่ agent เห็น
     ...
 ```
+
+## ใช้งาน LINE OA
+
+1. สร้าง channel ในระบบ (ใช้ค่าจาก LINE Developers Console):
+
+```bash
+curl -X POST localhost:8000/api/line/channels \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"name":"OA ของเรา","channel_id":"<LINE channel ID>",
+       "channel_secret":"<secret>","access_token":"<long-lived token>",
+       "greeting":"สวัสดีครับ","quick_menu":[{"label":"เมนู","url":"https://liff.line.me/xxx"}]}'
+```
+
+2. ตั้ง webhook URL ใน LINE Console: `https://<โดเมน>/api/line/webhook/<LINE channel ID>`
+3. เท่านี้แชทที่ทักเข้า OA จะถูกส่งเข้า AI agent อัตโนมัติ (ปิดได้ด้วย `agent_enabled: false` — โมดูลอื่น subscribe event `line.message.received` ไปตอบเองได้)
+
+**ผูกบัญชี:** user เรียก `POST /api/line/link-code` ได้โค้ด แล้วพิมพ์ `link <โค้ด>` ในแชท LINE — จากนั้น agent จะทำงานภายใต้สิทธิ์ RBAC ของ user คนนั้น (ยังไม่ผูก = guest ใช้ได้เฉพาะ tools สาธารณะ)
+
+**Broadcast:** `await enqueue("line_broadcast", channel_pk, "ข้อความ")` — ส่งผ่าน ARQ worker
 
 เปิดใช้โมดูลโดยเพิ่มชื่อเข้า `PSTACK_MODULES` ใน `.env` — kernel resolve dependency, สร้างตาราง, รัน hook ให้อัตโนมัติตอนบูต ดูตัวอย่างเต็มที่ `addons/users/`
