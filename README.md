@@ -162,4 +162,17 @@ AI ภายนอกจะเห็น **tools ชุดเดียวกั�
 
 📖 **คู่มือเต็ม: [docs/MODULE_GUIDE.md](docs/MODULE_GUIDE.md)** — เดินทีละขั้นพร้อมชี้ตัวอย่างจริง (โมดูล `faq` ตั้งใจเขียนไว้เป็นตัวอย่างครบทุก pattern)
 
+## สร้าง app แยก repo บนฐาน pstack
+
+app repo (เช่น `pstack-vdo`, `pstack-lms`) เก็บเฉพาะ addons ของตัวเอง แล้ว **pin pstack เป็น tag**
+— เริ่มจาก template repo [`pstack-app-template`](https://github.com/monthop-gmail/pstack-app-template) (กด "Use this template")
+
+```bash
+PSTACK_ADDONS_PATHS=addons,vdo_addons     # ชื่อ base dir ต้องไม่ซ้ำกัน
+PSTACK_MODULES=users,storage,vdo
+```
+
+กติกา: app ไม่แตะโค้ด pstack — อยากได้อะไรจาก kernel ให้ทำฝั่งนี้แล้วออก tag ใหม่
+ดู breaking changes + ตาราง compatibility ใน [CHANGELOG.md](CHANGELOG.md)
+
 **ลองเล่นเร็วสุด:** `docker compose up -d --build` แล้วเปิด `http://localhost:8000/agent` (หน้าแชทกับ AI) และ `http://localhost:8000/faq` (หน้า HTML จากโมดูลตัวอย่าง)

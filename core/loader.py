@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import logging
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -30,6 +32,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from core.db import Base
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleError(Exception):
@@ -59,11 +63,30 @@ class ModuleInfo:
 
 
 def discover(addons_paths: list[str]) -> dict[str, ModuleInfo]:
+    """รองรับหลาย addons path — รวม path นอกโปรเจกต์ (เช่น app repo แยกที่ใช้ pstack เป็นฐาน)
+
+    ชื่อโฟลเดอร์ base ต้องไม่ซ้ำกัน (ใช้เป็น python package prefix) เช่น
+    PSTACK_ADDONS_PATHS=/srv/pstack/addons,vdo_addons — ห้ามมี "addons" สองอัน
+    """
     found: dict[str, ModuleInfo] = {}
+    seen_bases: dict[str, Path] = {}
     for base in addons_paths:
-        base_path = Path(base)
+        base_path = Path(base).resolve()
         if not base_path.is_dir():
             continue
+        if base_path.name in seen_bases and seen_bases[base_path.name] != base_path:
+            raise ModuleError(
+                f"ชื่อโฟลเดอร์ addons ซ้ำกัน: '{base_path.name}' "
+                f"({seen_bases[base_path.name]} กับ {base_path}) — "
+                "ตั้งชื่อ dir ให้ต่างกัน เช่น addons กับ vdo_addons"
+            )
+        seen_bases[base_path.name] = base_path
+
+        # ให้ package "<base_dir>.<module>" import ได้แม้ base อยู่นอก cwd
+        parent = str(base_path.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+
         for child in sorted(base_path.iterdir()):
             manifest_file = child / "__manifest__.py"
             if not (child.is_dir() and manifest_file.exists()):
@@ -75,6 +98,10 @@ def discover(addons_paths: list[str]) -> dict[str, ModuleInfo]:
             if not isinstance(manifest, dict):
                 raise ModuleError(f"manifest ของ '{child.name}' ต้องเป็น dict")
             name = child.name  # ชื่อโมดูล = ชื่อโฟลเดอร์เสมอ
+            if name in found:
+                logger.warning(
+                    "module '%s' ถูก override โดย %s (ทับ %s)", name, base_path, found[name].path
+                )
             found[name] = ModuleInfo(
                 name=name,
                 path=child,

@@ -8,7 +8,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server"
+os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server,extdemo"
+os.environ["PSTACK_ADDONS_PATHS"] = "addons,tests/ext_addons"  # ทดสอบ external addons path
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 
@@ -534,6 +535,23 @@ def test_mcp_server(client):
     }
     assert "search_faq" in tools
     assert "count_users" not in tools
+
+
+def test_external_addons_path(client):
+    # โมดูลจาก tests/ext_addons ถูกโหลดคู่กับ addons/ หลัก (คนละ base dir)
+    assert "extdemo" in client.get("/healthz").json()["modules"]
+    assert client.get("/api/extdemo/ping").json()["status"] == "ok"
+
+
+def test_duplicate_addons_basename_rejected(tmp_path):
+    from core.loader import ModuleError, discover
+
+    (tmp_path / "addons").mkdir()
+    try:
+        discover(["addons", str(tmp_path / "addons")])
+        raise AssertionError("ต้อง raise ModuleError เมื่อชื่อ base dir ซ้ำ")
+    except ModuleError as e:
+        assert "ซ้ำ" in str(e)
 
 
 def test_event_bus_local():
