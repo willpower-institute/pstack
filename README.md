@@ -165,7 +165,7 @@ AI ภายนอกจะเห็น **tools ชุดเดียวกั�
 ## สร้าง app แยก repo บนฐาน pstack
 
 app repo (เช่น `pstack-vdo`, `pstack-lms`) เก็บเฉพาะ addons ของตัวเอง แล้ว **pin pstack เป็น tag**
-— เริ่มจาก template repo [`pstack-app-template`](https://github.com/monthop-gmail/pstack-app-template) (กด "Use this template")
+— เริ่มจาก template repo [`pstack-app-template`](https://github.com/willpower-institute/pstack-app-template) (กด "Use this template")
 
 ```bash
 PSTACK_ADDONS_PATHS=addons,vdo_addons     # ชื่อ base dir ต้องไม่ซ้ำกัน
