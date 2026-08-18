@@ -58,6 +58,20 @@ async def push(access_token: str, to: str, messages: list[dict]) -> bool:
     return await _post(access_token, "/message/push", {"to": to, "messages": messages})
 
 
+async def respond(
+    access_token: str, reply_token: str | None, to: str, messages: list[dict]
+) -> bool:
+    """ตอบผู้ใช้แบบประหยัด: ลอง reply ก่อน (ไม่นับโควตา) ถ้าไม่มี token หรือ reply ล้มเหลว
+    (token ใช้ครั้งเดียว/หมดอายุ) → fallback เป็น push ให้อัตโนมัติ (issue #6)
+
+    โมดูลที่ subscribe line.message.received ไปตอบเองใช้ตัวนี้ได้เลย ไม่ต้องรู้เรื่อง token หมดอายุ
+    ⚠️ reply_token ใช้ได้ครั้งเดียว — หนึ่ง channel ควรมีผู้ตอบคนเดียว (คุมด้วย agent_enabled)
+    """
+    if reply_token and await reply(access_token, reply_token, messages):
+        return True
+    return await push(access_token, to, messages)
+
+
 async def multicast(access_token: str, to: list[str], messages: list[dict]) -> bool:
     ok = True
     for i in range(0, len(to), 500):  # LINE จำกัด 500 ids ต่อครั้ง

@@ -10,6 +10,17 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.1.1 |
 
+## v0.2.2 — 2026-08-18
+
+จาก feedback care-agent-platform (issue #6) — **ไม่มี breaking change**
+
+- **line_oa `respond()` helper (#6):** โมดูลที่ subscribe `line.message.received` ไปตอบเอง
+  เดิมต้องใช้ push ทุกข้อความ (นับโควตา LINE) เพราะ event ไม่มี reply token · ตอนนี้:
+  - event พก `reply_token` + `channel_pk` เพิ่ม
+  - `line_client.respond(access_token, reply_token, to, messages)` ลอง reply (ฟรี) ก่อน →
+    fallback push อัตโนมัติ (โมดูลไม่ต้องรู้เรื่อง token หมดอายุ) · bridge ใช้ helper เดียวกันนี้แล้ว
+  - ⚠️ reply_token ใช้ครั้งเดียว → หนึ่ง channel ควรมีผู้ตอบคนเดียว (จด README แล้ว)
+
 ## v0.2.1 — 2026-08-18
 
 จาก feedback care-agent-platform (issues #4, #7, #8) — **ไม่มี breaking change**

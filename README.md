@@ -144,6 +144,8 @@ curl -X POST localhost:8000/api/line/channels \
 
 **Broadcast:** `await enqueue("line_broadcast", channel_pk, "ข้อความ")` — ส่งผ่าน ARQ worker
 
+**โมดูลตอบเอง (แทน agent):** subscribe event `line.message.received` (payload มี `channel_pk`, `reply_token`, `line_user_id`, `text`) แล้วตอบด้วย `line_client.respond(access_token, reply_token, line_user_id, [msg])` — ลอง **reply** (ฟรี ไม่นับโควตา LINE) ก่อน แล้ว fallback เป็น **push** ให้อัตโนมัติ ⚠️ `reply_token` ใช้ได้ครั้งเดียว — **หนึ่ง channel ควรมีผู้ตอบคนเดียว** (คุมด้วย `agent_enabled`)
+
 ## ให้ AI ภายนอกต่อเข้าระบบ (MCP)
 
 1. สร้าง API key: `POST /api/keys {"name":"my-agent"}` — ได้ `psk_...` (แสดงครั้งเดียว, revoke ได้ที่ `DELETE /api/keys/{id}`)

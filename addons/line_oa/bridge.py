@@ -111,7 +111,13 @@ async def _handle_event(channel_pk: int, event: dict) -> None:
 
         await ctx.events.emit(
             "line.message.received",
-            {"channel": channel.channel_id, "line_user_id": line_user_id, "text": text},
+            {
+                "channel": channel.channel_id,
+                "channel_pk": channel.id,  # ใช้หา access_token ได้โดยไม่ต้อง query ซ้ำ
+                "line_user_id": line_user_id,
+                "text": text,
+                "reply_token": reply_token,  # โมดูลที่ตอบเองใช้ client.respond() ได้ (#6)
+            },
             broadcast=True,
         )
 
@@ -136,13 +142,10 @@ async def _handle_event(channel_pk: int, event: dict) -> None:
     # งาน agent — เปิด session DB ใหม่ (คนละ scope กับด้านบน)
     answer = await _run_agent(channel_pk, line_user.id, text)
     if answer:
-        ok = await line_client.reply(
-            channel.access_token, reply_token, [line_client.text_message(answer)]
+        # respond() ลอง reply ก่อน (agent อาจใช้เวลานานจน token หมด) แล้ว fallback push ให้เอง
+        await line_client.respond(
+            channel.access_token, reply_token, line_user_id, [line_client.text_message(answer)]
         )
-        if not ok:  # reply token หมดอายุ (agent ใช้เวลานาน) -> push แทน
-            await line_client.push(
-                channel.access_token, line_user_id, [line_client.text_message(answer)]
-            )
 
 
 async def _run_agent(channel_pk: int, line_user_pk: int, text: str) -> str:

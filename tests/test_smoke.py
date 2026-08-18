@@ -587,6 +587,83 @@ def test_periodic_job_registration():
     jobs._periodic.pop()  # cleanup ไม่ให้ค้างข้ามเทส
 
 
+def test_line_respond_reply_then_push():
+    """issue #6: respond() ลอง reply ก่อน → fallback push (ไม่มี token / reply ล้มเหลว)"""
+    import asyncio
+
+    from addons.line_oa import client as lc
+
+    async def _run():
+        calls = {"push": []}
+
+        async def fake_reply(tok, rt, msgs):
+            return rt == "good"
+
+        async def fake_push(tok, to, msgs):
+            calls["push"].append(to)
+            return True
+
+        orig_reply, orig_push = lc.reply, lc.push
+        lc.reply, lc.push = fake_reply, fake_push
+        try:
+            # reply สำเร็จ -> ไม่ push
+            assert await lc.respond("t", "good", "U1", [{}]) is True
+            assert calls["push"] == []
+            # ไม่มี token -> push
+            assert await lc.respond("t", "", "U1", [{}]) is True
+            assert calls["push"] == ["U1"]
+            # reply ล้มเหลว -> fallback push
+            assert await lc.respond("t", "bad", "U2", [{}]) is True
+            assert calls["push"][-1] == "U2"
+        finally:
+            lc.reply, lc.push = orig_reply, orig_push
+
+    asyncio.run(_run())
+
+
+def test_line_event_carries_reply_token(client, line_capture, monkeypatch):
+    """issue #6: line.message.received ต้องพก reply_token + channel_pk"""
+    from types import SimpleNamespace
+
+    from addons.ai_agent.runtime import AgentRuntime
+    from core.runtime import ctx
+
+    monkeypatch.setattr(
+        AgentRuntime,
+        "_stream_ctx",
+        lambda self, *, system, messages, tools: FakeStream(
+            ["ok"],
+            SimpleNamespace(content=[{"type": "text", "text": "ok"}], stop_reason="end_turn"),
+        ),
+    )
+    captured = {}
+
+    async def handler(payload):
+        captured.update(payload)
+
+    ctx.events._handlers["line.message.received"].append(handler)
+    try:
+        _line_post(
+            client,
+            "C0001",
+            "sec-1",
+            {
+                "events": [
+                    {
+                        "type": "message",
+                        "replyToken": "rtX",
+                        "source": {"userId": "U111"},
+                        "message": {"type": "text", "text": "hi"},
+                    }
+                ]
+            },
+        )
+        assert captured.get("reply_token") == "rtX"
+        assert "channel_pk" in captured
+    finally:
+        ctx.events._handlers["line.message.received"].remove(handler)
+
+
 def test_jobs_public_accessors():
     """issue #8: public accessor ของ background/periodic job (คู่กับ get_tools)"""
     from core import jobs
