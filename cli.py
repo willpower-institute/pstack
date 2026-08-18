@@ -78,15 +78,36 @@ def makemigration(
         )
         raise typer.Exit(1)
 
-    async def _run() -> None:
-        from core import migrations
+    from core import migrations
 
+    versions = migrations.migrations_dir(info) / "versions"
+    before = set(versions.glob("*.py")) if versions.is_dir() else set()
+
+    async def _run() -> None:
         try:
             await migrations.autogenerate(get_engine(), info, message)
         finally:
             await dispose_engine()
 
     asyncio.run(_run())
+
+    # ตรวจ revision ที่เพิ่ง generate — ถ้าเป็น "อันแรกและว่างเปล่า" มักแปลว่าตารางถูกสร้าง
+    # ด้วย create-table fallback ไปก่อนแล้ว (issue #7) → ปฏิเสธ ไม่ปล่อยให้ commit revision เปล่า
+    new_files = (set(versions.glob("*.py")) - before) if versions.is_dir() else set()
+    is_first = len(before) == 0
+    if is_first and len(new_files) == 1:
+        new_file = new_files.pop()
+        if migrations.revision_is_empty(new_file):
+            new_file.unlink()  # เก็บ revision เปล่าไว้ = กับดัก deploy เครื่องใหม่ตารางหาย
+            typer.secho(
+                f"✗ revision แรกของ '{module}' ออกมาว่างเปล่า (ไม่มี op.) — ลบให้แล้ว\n"
+                f"  มักแปลว่าตารางถูกสร้างด้วย create-table fallback ไปก่อน "
+                f"(รันระบบ/เทสก่อน makemigration)\n"
+                f"  วิธีแก้: DROP ตารางของโมดูล '{module}' ออกจาก DB แล้ว makemigration ใหม่",
+                fg="red",
+            )
+            raise typer.Exit(1)
+
     typer.secho(f"สร้าง revision ใหม่ใน addons/{module}/migrations/versions/", fg="green")
 
 

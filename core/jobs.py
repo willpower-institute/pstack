@@ -64,6 +64,20 @@ def periodic_job(**cron_kwargs: Any):
     return decorator
 
 
+def background_jobs() -> dict[str, Callable[..., Awaitable[Any]]]:
+    """job แบบ enqueue ที่ลงทะเบียนไว้ (public accessor — คู่กับ get_tools() ใน core.ai)"""
+    return dict(_jobs)
+
+
+def periodic_jobs() -> list[tuple[Callable[..., Awaitable[Any]], dict]]:
+    """periodic/cron job ที่ลงทะเบียนไว้ — (fn, cron_kwargs)
+
+    ใช้เขียนเทสยืนยันว่า job สำคัญยังเป็น periodic อยู่ (กันใครเผลอเปลี่ยนเป็น
+    @background_job แล้วลูปเงียบไปโดยไม่มี error) — issue #8
+    """
+    return list(_periodic)
+
+
 async def enqueue(job_name: str, *args: Any, **kwargs: Any) -> Any:
     if job_name not in _jobs:
         raise KeyError(f"ไม่พบ job '{job_name}' — ต้องลงทะเบียนด้วย @background_job ก่อน")

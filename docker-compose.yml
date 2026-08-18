@@ -22,7 +22,9 @@ services:
     build: .
     container_name: pstack-worker
     restart: unless-stopped
-    command: arq core.worker.WorkerSettings
+    # `python -m arq` ใส่ CWD (/app) ลง sys.path — resolve core/addons จาก /app
+    # (arq เป็น console script ไม่ใส่ CWD ให้ ต่างจาก uvicorn → worker บูตไม่ขึ้น #4)
+    command: python -m arq core.worker.WorkerSettings
     env_file: .env
     volumes:
       - uploads:/app/uploads

@@ -587,6 +587,55 @@ def test_periodic_job_registration():
     jobs._periodic.pop()  # cleanup ไม่ให้ค้างข้ามเทส
 
 
+def test_jobs_public_accessors():
+    """issue #8: public accessor ของ background/periodic job (คู่กับ get_tools)"""
+    from core import jobs
+
+    @jobs.background_job
+    async def _acc_bg(ctx):
+        return None
+
+    @jobs.periodic_job(minute={0})
+    async def _acc_tick(ctx):
+        return None
+
+    assert "_acc_bg" in jobs.background_jobs()
+    assert any(fn.__name__ == "_acc_tick" for fn, _ in jobs.periodic_jobs())
+    # accessor คืน copy — แก้ผลลัพธ์ไม่กระทบ registry จริง
+    jobs.background_jobs().clear()
+    assert "_acc_bg" in jobs.background_jobs()
+    del jobs._jobs["_acc_bg"]
+    jobs._periodic[:] = [x for x in jobs._periodic if x[0].__name__ != "_acc_tick"]
+
+
+def test_isolated_session_helper():
+    """issue #8: helper สร้าง engine แยกต่อเทส (ไม่แตะ global engine)"""
+    import asyncio
+
+    from sqlalchemy import text
+
+    from core.testing import isolated_session
+
+    async def _run():
+        async with isolated_session("sqlite+aiosqlite:///:memory:") as s:
+            assert (await s.execute(text("SELECT 1"))).scalar_one() == 1
+
+    asyncio.run(_run())
+
+
+def test_revision_is_empty(tmp_path):
+    """issue #7: ตรวจ revision เปล่า (ไม่มี op.)"""
+    from core.migrations import revision_is_empty
+
+    empty = tmp_path / "empty.py"
+    empty.write_text("def upgrade():\n    pass\n")
+    assert revision_is_empty(empty) is True
+
+    full = tmp_path / "full.py"
+    full.write_text("def upgrade():\n    op.create_table('x')\n")
+    assert revision_is_empty(full) is False
+
+
 def test_event_bus_local():
     import asyncio
 

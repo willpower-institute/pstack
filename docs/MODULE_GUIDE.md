@@ -138,6 +138,20 @@ async def care_tick(ctx):
 
 เพิ่มโมดูลเข้า `PSTACK_MODULES` ใน `tests/test_smoke.py` แล้วเขียนเทสผ่าน `TestClient` — บูตจริงทั้งระบบบน sqlite (ไม่ต้องมี postgres/redis/API key) ดูตัวอย่างครบทุกแบบใน `tests/test_smoke.py`
 
+**เทส async ที่แตะ DB เอง (โดยเฉพาะบน Postgres CI):** อย่าใช้ global engine — มันผูกกับ event loop ที่สร้างมัน เทสที่ใช้ loop ใหม่ต่อเทสจะเจอ `got Future attached to a different loop` บน asyncpg (aiosqlite เงียบ) ใช้ `core.testing.isolated_session` สร้าง engine แยกต่อเทส:
+
+```python
+import pytest_asyncio
+from core.testing import isolated_session
+
+@pytest_asyncio.fixture
+async def db_session():
+    async with isolated_session() as session:
+        yield session
+```
+
+**ยืนยัน periodic job ไม่ถูกเผลอเปลี่ยน:** ใช้ public accessor `core.jobs.periodic_jobs()` / `background_jobs()` (คู่กับ `core.ai.get_tools()`) — เช่น `assert "care_tick" in [fn.__name__ for fn, _ in periodic_jobs()]` กันใครเปลี่ยน `@periodic_job` กลับเป็น `@background_job` แล้วลูปเงียบ
+
 ## Checklist ก่อน merge
 
 - [ ] `__manifest__.py` ระบุ `depends` ครบ (ขาดแล้วโมดูลจะโหลดก่อน dependency แล้วพัง)

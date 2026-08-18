@@ -91,6 +91,11 @@ def has_migrations(info: ModuleInfo) -> bool:
     return (migrations_dir(info) / "env.py").exists()
 
 
+def revision_is_empty(path: Path) -> bool:
+    """revision ไม่มีคำสั่ง schema เลย (ไม่มี op.) — issue #7"""
+    return "op." not in path.read_text()
+
+
 def ensure_scaffold(info: ModuleInfo) -> None:
     mig = migrations_dir(info)
     (mig / "versions").mkdir(parents=True, exist_ok=True)

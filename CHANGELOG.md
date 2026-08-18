@@ -10,6 +10,20 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.1.1 |
 
+## v0.2.1 — 2026-08-18
+
+จาก feedback care-agent-platform (issues #4, #7, #8) — **ไม่มี breaking change**
+
+- **แก้บั๊ก worker บูตไม่ขึ้น (#4):** `command: arq core.worker.WorkerSettings` ใน compose เป็น
+  console script → Python ไม่ใส่ CWD ลง `sys.path` → resolve `core`/`addons` จาก site-packages
+  (ที่ไม่มี addons ย่อย) → `ModuleNotFoundError` **background/periodic job ไม่เคยทำงานใน docker
+  ตั้งแต่ v0.1.0** · แก้เป็น `python -m arq core.worker.WorkerSettings` (ทั้ง pstack และ template)
+- **makemigration ปฏิเสธ revision เปล่า (#7):** revision แรกที่ออกมาว่าง (ไม่มี `op.`) มักแปลว่า
+  ตารางถูกสร้างด้วย create-table fallback ไปก่อน — ตอนนี้ลบไฟล์เปล่าให้ + บอกวิธีแก้ + exit 1
+  (เดิมเงียบ แล้วไปพังตอน deploy เครื่องใหม่)
+- **DX (#8):** `core.jobs.periodic_jobs()` / `background_jobs()` public accessor (คู่กับ `get_tools`) ·
+  `core.testing.isolated_session` helper เลี่ยงบั๊ก global engine ผูก event loop บนเทส async (Postgres)
+
 ## v0.2.0 — 2026-08-18
 
 จาก feedback ของ consumer จริง (care-agent-platform issues #1, #2) — **ไม่มี breaking change**
