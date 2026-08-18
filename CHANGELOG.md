@@ -8,6 +8,15 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | App repo | pstack tag |
 |---|---|
 | pstack-vdo | v0.1.0 |
+| care-agent-platform | v0.1.1 |
+
+## v0.1.1 — 2026-08-18
+
+**ใส่สัญญาอนุญาต** — ไม่มีการเปลี่ยนโค้ด อัปเกรดจาก v0.1.0 ได้ทันทีโดยไม่ต้องแก้อะไร
+
+- เพิ่มไฟล์ `LICENSE` (MIT) — ก่อนหน้านี้ repo ไม่มีสัญญาอนุญาต ซึ่งตามกฎหมายลิขสิทธิ์
+  หมายถึง all rights reserved ทำให้ app repo ที่เป็น open source ใช้ pstack เป็นฐานไม่ได้
+- `pyproject.toml`: เพิ่ม `license` และ `readme`
 
 ## v0.1.0 — 2026-08-09
 

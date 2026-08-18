@@ -176,3 +176,7 @@ PSTACK_MODULES=users,storage,vdo
 ดู breaking changes + ตาราง compatibility ใน [CHANGELOG.md](CHANGELOG.md)
 
 **ลองเล่นเร็วสุด:** `docker compose up -d --build` แล้วเปิด `http://localhost:8000/agent` (หน้าแชทกับ AI) และ `http://localhost:8000/faq` (หน้า HTML จากโมดูลตัวอย่าง)
+
+## License
+
+MIT — ดู [LICENSE](LICENSE)

@@ -29,3 +29,7 @@ htmlcov/
 *.sqlite3
 *.db
 /data/
+
+# build artifacts (pip install . / python -m build)
+build/
+dist/
