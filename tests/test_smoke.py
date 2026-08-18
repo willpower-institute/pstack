@@ -554,6 +554,39 @@ def test_duplicate_addons_basename_rejected(tmp_path):
         assert "ซ้ำ" in str(e)
 
 
+def test_loader_table_detection_order_independent():
+    """issue #1: ตรวจตารางต้องได้ครบแม้โมดูลถูก import ก่อน create_app()
+    (รวม bare Table อย่าง user_roles ที่ไม่มี mapper) — regression lock"""
+    import importlib
+
+    import addons.users.models  # noqa: F401 — จำลอง pre-import (โมดูลอยู่ใน sys.modules แล้ว)
+    from core.loader import _collect_table_names, discover
+
+    info = discover(["addons"])["users"]
+    models_mod = importlib.import_module("addons.users.models")
+    tables = _collect_table_names(info, models_mod)
+    # ORM models + association table ต้องมาครบ ไม่ว่าใครจะ import ก่อน
+    assert {"users", "roles", "user_roles"} <= set(tables)
+
+
+def test_periodic_job_registration():
+    """issue #2: @periodic_job ต้องเข้า cron_jobs ของ worker"""
+    from core import jobs
+
+    before = len(jobs._periodic)
+
+    @jobs.periodic_job(minute={0}, hour={9})
+    async def _demo_tick(ctx):
+        return None
+
+    assert any(fn.__name__ == "_demo_tick" for fn, _ in jobs._periodic)
+    ws = jobs.build_worker_settings()
+    assert len(ws.cron_jobs) == len(jobs._periodic) == before + 1
+    # background_job เดิมยังทำงานแยกกัน
+    assert "_demo_tick" not in jobs._jobs
+    jobs._periodic.pop()  # cleanup ไม่ให้ค้างข้ามเทส
+
+
 def test_event_bus_local():
     import asyncio
 

@@ -40,8 +40,41 @@ class ModuleError(Exception):
     pass
 
 
-# module name -> รายชื่อตาราง (คงอยู่ตลอดโปรเซส — import ซ้ำแล้ว diff metadata จะว่าง)
-_module_tables_cache: dict[str, list[str]] = {}
+def _issubclass_safe(obj: object, base: type) -> bool:
+    try:
+        return issubclass(obj, base)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+
+
+def _collect_table_names(info: ModuleInfo, models_mod: ModuleType | None) -> list[str]:
+    """หาชื่อตารางของโมดูลจาก namespace ของ models.py — ไม่ขึ้นกับลำดับการ import
+
+    แทนวิธีเดิมที่ diff Base.metadata รอบการ import: ถ้าโมดูลถูก import เข้า sys.modules
+    ก่อน create_app() แล้ว importlib.import_module จะเป็น no-op → diff ได้เซตว่าง →
+    ตารางไม่ถูกสร้าง "แบบเงียบ" (issue #1)
+
+    วิธีนี้อ่าน attribute ในโมดูล models โดยตรง จึงได้ผลเท่ากันทุกลำดับการ import และ
+    จับ bare Table() (association table เช่น user_roles ที่ไม่มี mapper) ได้ด้วย
+    """
+    if models_mod is None:
+        return []
+    from sqlalchemy import Table as SATable
+
+    names: set[str] = set()
+    for obj in vars(models_mod).values():
+        if isinstance(obj, SATable):
+            names.add(obj.name)  # bare association table
+        elif (
+            _issubclass_safe(obj, Base)
+            and obj is not Base
+            # ORM model — เอาเฉพาะที่นิยามในโมดูลนี้ (กัน class ที่ re-export ข้ามโมดูล)
+            and getattr(obj, "__module__", "").startswith(info.package)
+        ):
+            table = getattr(obj, "__table__", None)
+            if table is not None:
+                names.add(table.name)
+    return sorted(names)
 
 
 @dataclass
@@ -146,18 +179,9 @@ def _import_submodule(info: ModuleInfo, name: str) -> ModuleType | None:
 
 def load_module(app: FastAPI, info: ModuleInfo) -> None:
     """Import โมดูลและลงทะเบียนทุก extension point (ไม่แตะ DB — ส่วน DB อยู่ใน registry)"""
-    # snapshot ก่อน import ทั้ง package — โมดูลอาจ import models ทางอ้อมตั้งแต่ __init__
-    # (cache ไว้เพราะ import ครั้งที่สองในโปรเซสเดิม diff จะว่างเปล่า)
-    if info.name in _module_tables_cache:
-        importlib.import_module(info.package)
-        _import_submodule(info, "models")
-        info.tables = _module_tables_cache[info.name]
-    else:
-        before = set(Base.metadata.tables)
-        importlib.import_module(info.package)
-        _import_submodule(info, "models")
-        info.tables = sorted(set(Base.metadata.tables) - before)
-        _module_tables_cache[info.name] = info.tables
+    importlib.import_module(info.package)
+    models_mod = _import_submodule(info, "models")
+    info.tables = _collect_table_names(info, models_mod)
 
     routes = _import_submodule(info, "routes")
     if routes is not None:

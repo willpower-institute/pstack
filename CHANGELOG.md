@@ -10,6 +10,19 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.1.1 |
 
+## v0.2.0 — 2026-08-18
+
+จาก feedback ของ consumer จริง (care-agent-platform issues #1, #2) — **ไม่มี breaking change**
+
+- **แก้บั๊ก loader (#1):** โมดูลที่ถูก import เข้า `sys.modules` ก่อน `create_app()` เคยไม่ถูก
+  สร้างตารางให้ (diff `Base.metadata` ได้เซตว่าง) แล้วล้มเงียบ `no such table` ตอน query —
+  เปลี่ยนมาหาตารางจาก namespace ของ `models.py` โดยตรง ได้ผลเท่ากันทุกลำดับการ import และ
+  จับ bare `Table()` (association table เช่น `user_roles`) ได้ด้วย · เลิกใช้ `_module_tables_cache`
+- **Periodic/cron jobs (#2):** เพิ่ม `@periodic_job(**cron_kwargs)` ให้โมดูลลงทะเบียน job ที่
+  worker เดินเองเป็นระยะ (ที่เดิมทำได้แค่ `@background_job` แบบสั่งแล้วรัน) — `build_worker_settings()`
+  ประกอบ `cron_jobs` ให้อัตโนมัติ · cron ยึดเวลา UTC ของ container
+- app repo ที่ต้องการ periodic job หรือมีเทสที่ import addon ที่ระดับ top-level → อัปเป็น v0.2.0
+
 ## v0.1.1 — 2026-08-18
 
 **ใส่สัญญาอนุญาต** — ไม่มีการเปลี่ยนโค้ด อัปเกรดจาก v0.1.0 ได้ทันทีโดยไม่ต้องแก้อะไร
