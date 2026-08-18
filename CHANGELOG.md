@@ -10,6 +10,15 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.1.1 |
 
+## Unreleased
+
+- **แก้บั๊ก worker (#4):** service `worker` ใน `docker-compose.yml` บูตไม่ขึ้นเลยตั้งแต่ v0.1.0
+  — `arq` เป็น console script จึงไม่มี CWD ใน `sys.path` ทำให้ import `core`/`addons` จาก
+  site-packages (ซึ่งติดตั้ง `addons` ไว้แค่ `__init__.py`) แล้วพังด้วย
+  `ModuleNotFoundError: No module named 'addons.users'` · เปลี่ยนเป็น `python -m arq`
+  ซึ่งใส่ CWD ให้เหมือนที่ uvicorn ทำกับ service `app`
+  **ผลกระทบ:** background job และ periodic job (v0.2.0) ไม่เคยทำงานจริงในการ deploy ด้วย compose
+
 ## v0.2.0 — 2026-08-18
 
 จาก feedback ของ consumer จริง (care-agent-platform issues #1, #2) — **ไม่มี breaking change**

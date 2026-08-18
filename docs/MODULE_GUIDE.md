@@ -128,7 +128,7 @@ async def care_tick(ctx):
     ...
 # @periodic_job(hour={9}, minute={0})     # ทุกวัน 09:00
 
-# worker เรียกเอง ไม่ต้อง enqueue — ต้องรัน `arq core.worker.WorkerSettings` (มีใน compose)
+# worker เรียกเอง ไม่ต้อง enqueue — ต้องรัน `python -m arq core.worker.WorkerSettings` (มีใน compose)
 ```
 
 > ⏰ **cron ตีความด้วยเวลา UTC ของ container** — คำนวณ due time เป็น UTC ไว้ก่อนเสมอ

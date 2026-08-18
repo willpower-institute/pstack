@@ -22,7 +22,10 @@ services:
     build: .
     container_name: pstack-worker
     restart: unless-stopped
-    command: arq core.worker.WorkerSettings
+    # `python -m arq` ไม่ใช่ `arq` — console script ไม่มี CWD ใน sys.path จึงไป import
+    # core/addons จาก site-packages (ที่ pip install ทิ้งไว้) ซึ่งไม่มี addons ย่อย
+    # แล้วพังด้วย ModuleNotFoundError: No module named 'addons.users' (#4)
+    command: python -m arq core.worker.WorkerSettings
     env_file: .env
     volumes:
       - uploads:/app/uploads
