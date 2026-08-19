@@ -40,6 +40,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 | `faq` | **โมดูลตัวอย่าง** — หน้า HTML จาก templates ของโมดูล (`/faq`), REST API, AI tool สาธารณะ (`search_faq` — guest บน LINE ถามได้), seed data |
 | `api_keys` | long-lived API key (`psk_...`) สำหรับ machine/agent ภายนอก — hash เก็บ, revoke ได้, ใช้แทน JWT ได้ทุก endpoint |
 | `mcp_server` | เปิด tool registry ทั้งหมดให้ AI ภายนอกผ่าน **MCP** (`POST /mcp`, Streamable HTTP) — tools กรองตาม RBAC ของเจ้าของ token |
+| `tenancy` | **multi-tenant** control plane: `tenant`/`workspace`/`tenant_member` + `TenantScope`/`scoped`/`get_scope` (header `X-Tenant-Id`) + RLS tooling · โมดูลโดเมน import primitives จาก `core.tenancy` |
 
 ## Roadmap
 
@@ -49,7 +50,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 3 — AI Agent module (agent runtime บน Claude, SSE chat API, RBAC-scoped tools)
 - [x] Phase 4 — `line_oa` (webhook หลาย channel, account linking, agent bridge), module generator
 - [x] Phase 4.5 — DX: โมดูลตัวอย่าง `faq`, หน้าแชท `/agent`, [MODULE_GUIDE](docs/MODULE_GUIDE.md), CI
-- [ ] Phase 5 — Multi-tenant, admin UI
+- [~] Phase 5 — Multi-tenant: โมดูล `tenancy` (tenant/workspace/membership + `core.tenancy` scope helper + RLS), `core.clock`, `stamp` (v0.3.0) · เหลือ admin UI
 
 ## Development
 

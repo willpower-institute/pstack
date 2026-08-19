@@ -8,7 +8,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
 os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server,extdemo"
+os.environ["PSTACK_MODULES"] = (
+    "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server,tenancy,extdemo"
+)
 os.environ["PSTACK_ADDONS_PATHS"] = "addons,tests/ext_addons"  # ทดสอบ external addons path
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
@@ -535,6 +537,90 @@ def test_mcp_server(client):
     }
     assert "search_faq" in tools
     assert "count_users" not in tools
+
+
+def test_tenancy_membership_and_isolation(client):
+    """v0.3.0: สร้าง tenant, ผูก member, X-Tenant-Id เป็นด่านบังคับ, non-member โดน 404"""
+    admin = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    admin_h = {"Authorization": f"Bearer {admin}"}
+
+    # superuser สร้าง 2 tenant
+    for tid in ("clinic-a", "clinic-b"):
+        r = client.post(
+            "/api/tenancy/tenants", json={"tenant_id": tid, "display_name": tid}, headers=admin_h
+        )
+        assert r.status_code == 201, r.text
+
+    # id ผิดรูปแบบ identity/v1 -> 400
+    assert (
+        client.post(
+            "/api/tenancy/tenants", json={"tenant_id": "Bad Id"}, headers=admin_h
+        ).status_code
+        == 400
+    )
+    # tenant ซ้ำ -> 409
+    assert (
+        client.post(
+            "/api/tenancy/tenants", json={"tenant_id": "clinic-a"}, headers=admin_h
+        ).status_code
+        == 409
+    )
+
+    # สร้าง user ธรรมดา แล้วผูกเข้า clinic-a อย่างเดียว
+    uid = client.post(
+        "/api/users",
+        json={"email": "nurse@example.com", "password": "pw1234", "full_name": "พยาบาล"},
+        headers=admin_h,
+    ).json()["id"]
+    assert (
+        client.post(
+            "/api/tenancy/tenants/clinic-a/members",
+            json={"user_id": uid},
+            headers=admin_h,
+        ).status_code
+        == 201
+    )
+
+    nurse = client.post(
+        "/api/auth/login", json={"email": "nurse@example.com", "password": "pw1234"}
+    ).json()["access_token"]
+    nurse_h = {"Authorization": f"Bearer {nurse}"}
+
+    # ไม่ส่ง X-Tenant-Id -> 400 (ระบบไม่เดา tenant ให้)
+    assert client.get("/api/tenancy/members", headers=nurse_h).status_code == 400
+
+    # nurse เป็นสมาชิก clinic-a -> เห็น, clinic-b -> 404 (ไม่ยืนยันว่ามี tenant ให้คนนอกรู้)
+    r = client.get("/api/tenancy/members", headers={**nurse_h, "X-Tenant-Id": "clinic-a"})
+    assert r.status_code == 200
+    assert any(m["user_id"] == uid for m in r.json())
+    assert (
+        client.get(
+            "/api/tenancy/members", headers={**nurse_h, "X-Tenant-Id": "clinic-b"}
+        ).status_code
+        == 404
+    )
+
+    # superuser bypass membership -> เข้า clinic-b ได้
+    assert (
+        client.get(
+            "/api/tenancy/members", headers={**admin_h, "X-Tenant-Id": "clinic-b"}
+        ).status_code
+        == 200
+    )
+
+    # /me — nurse เห็นเฉพาะ clinic-a
+    me = client.get("/api/tenancy/me", headers=nurse_h).json()
+    assert me["tenants"] == ["clinic-a"] and me["superuser"] is False
+
+    # workspace ผูกกับ tenant ใน scope
+    r = client.post(
+        "/api/tenancy/workspaces",
+        json={"workspace_id": "ward-1"},
+        headers={**nurse_h, "X-Tenant-Id": "clinic-a"},
+    )
+    assert r.status_code == 201 and r.json()["tenant_id"] == "clinic-a"
 
 
 def test_external_addons_path(client):

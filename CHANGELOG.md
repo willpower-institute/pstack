@@ -8,7 +8,29 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | App repo | pstack tag |
 |---|---|
 | pstack-vdo | v0.1.0 |
-| care-agent-platform | v0.1.1 |
+| care-agent-platform | v0.3.0 |
+
+## v0.3.0 — 2026-08-19
+
+Phase 5 (multi-tenant) — จาก design ร่วมกับ care-agent-platform (issue #3) · **ไม่มี breaking
+change** สำหรับ app เดิม (โมดูล/ตารางใหม่ล้วน ๆ) — app ที่จะใช้ multi-tenant ค่อยเปิด `tenancy`
+
+- **`core.tenancy` — primitives ที่ kernel เป็นเจ้าของ:** `ID_PATTERN` (ตรง identity/v1 `$defs.Id`
+  — มี contract-lock test), `validate_id`/`new_id`, `Principal`, `TenantScope`, `scoped()`,
+  `assert_same_tenant()`, `rls_statements()`, `set_tenant()` · โมดูลโดเมน import จากที่นี่
+  (path-independent) ไม่ต้องรู้จัก addon
+- **โมดูล `tenancy` (control plane):** ตาราง `tenant`/`workspace`/`tenant_member` (ชื่อกลาง ไม่มี
+  prefix) + services + `get_scope` dependency (header `X-Tenant-Id`, non-member ตอบ 404 ไม่ใช่ 403)
+  + REST จัดการ tenant/member/workspace
+- **RLS เป็นด่าน DB กันพลาด:** `rls_statements(table)` เปิด `ENABLE`+**`FORCE ROW LEVEL SECURITY`**+
+  policy กรองตาม GUC `pstack.tenant_id` (idempotent) · deny-by-default เมื่อไม่ตั้ง scope ·
+  conformance test พิสูจน์ isolation จริงบน Postgres (owner+FORCE) — ⚠️ app **ห้าม**ต่อ DB ด้วย superuser
+- **`core.clock`:** `now`/`set_now`/`FakeClock` (UTC-aware, ปฏิเสธ naive) — testable clock ระดับ kernel
+- **`stamp` (adopt/rollback):** `migrations.stamp()` + `cli.py stamp <module> [--rev head]` — บันทึก
+  version โดยไม่รัน migration
+- **adopt ตารางเดิมได้แบบ idempotent:** initial migration ของ `tenancy` เจอตารางชื่อกลางอยู่แล้ว
+  จะข้าม create + ให้ alembic บันทึกเอง (ไม่ต้อง stamp มือ, kernel ไม่รู้จัก prefix ของ consumer) +
+  guard เตือนเมื่อ adopt ไม่ครบ · runbook + ตารางชื่อ canonical (constraint/index) ใน MODULE_GUIDE §9
 
 ## v0.2.2 — 2026-08-18
 

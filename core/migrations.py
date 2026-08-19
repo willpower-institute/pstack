@@ -125,6 +125,28 @@ async def upgrade_to_head(engine: AsyncEngine, info: ModuleInfo) -> None:
     logger.info("module '%s': migrations upgraded to head", info.name)
 
 
+async def stamp(engine: AsyncEngine, info: ModuleInfo, rev: str = "head") -> None:
+    """บันทึกว่าโมดูลนี้อยู่ที่ revision `rev` โดย **ไม่รันคำสั่ง schema**
+
+    ใช้ตอน adopt ตารางที่มีอยู่แล้วเข้าสู่การจัดการของ alembic — เขียน/อัปเดต
+    version table `alembic_version_<name>` ให้ชี้ head โดยไม่ create/alter อะไร
+
+    หมายเหตุ: path ของ addon `tenancy` ไม่ต้องพึ่ง stamp เพราะ initial migration
+    เป็น idempotent (เจอตารางแล้วข้าม) — alembic บันทึก revision ให้เองตอนรัน ·
+    stamp มีไว้สำหรับเคส adopt อื่น / rollback / ซ่อม version table ที่หลุด
+    """
+    cfg = _build_config(info)
+
+    def _run(conn: Connection) -> None:
+        cfg.attributes["connection"] = conn
+        command.stamp(cfg, rev)
+
+    async with engine.connect() as conn:
+        await conn.run_sync(_run)
+        await conn.commit()
+    logger.info("module '%s': stamped to %s", info.name, rev)
+
+
 async def autogenerate(engine: AsyncEngine, info: ModuleInfo, message: str) -> None:
     """สร้าง revision ใหม่จาก diff ระหว่าง models กับ DB (เฉพาะตารางของโมดูลนี้)"""
     ensure_scaffold(info)
