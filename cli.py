@@ -112,6 +112,50 @@ def makemigration(
 
 
 @app.command()
+def stamp(
+    module: str,
+    rev: str = typer.Option("head", "--rev", help="revision ปลายทาง (ปกติ head)"),
+) -> None:
+    """บันทึก version ของโมดูลเป็น `rev` โดยไม่รัน migration — ใช้ตอน adopt ตารางเดิม
+
+    ดู runbook adopt ใน docs/MODULE_GUIDE.md — ปกติ rename ตาราง/constraint/index
+    ใน transaction เดียวก่อน แล้วค่อย stamp (โมดูลที่ migration เป็น idempotent เช่น
+    `tenancy` ไม่ต้อง stamp — บูตแล้วมันบันทึกเอง)
+    """
+    from core.app import create_app
+
+    create_app()
+
+    from core.db import dispose_engine, get_engine
+    from core.runtime import ctx
+
+    info = next((m for m in ctx.load_order if m.name == module), None)
+    if info is None:
+        typer.secho(
+            f"โมดูล '{module}' ไม่อยู่ใน PSTACK_MODULES — เพิ่มใน .env ก่อน", fg="red"
+        )
+        raise typer.Exit(1)
+
+    from core import migrations
+
+    if not migrations.has_migrations(info):
+        typer.secho(
+            f"โมดูล '{module}' ไม่มีโฟลเดอร์ migrations — stamp ใช้ได้เฉพาะโมดูลที่มี alembic",
+            fg="red",
+        )
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        try:
+            await migrations.stamp(get_engine(), info, rev)
+        finally:
+            await dispose_engine()
+
+    asyncio.run(_run())
+    typer.secho(f"stamp '{module}' → {rev} แล้ว (ไม่ได้รัน migration)", fg="green")
+
+
+@app.command()
 def migrate() -> None:
     """apply migrations + install/upgrade ทุกโมดูลตาม PSTACK_MODULES (เหมือนตอนบูต app)"""
     from core.app import create_app

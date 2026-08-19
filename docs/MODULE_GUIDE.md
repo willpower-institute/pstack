@@ -152,6 +152,66 @@ async def db_session():
 
 **ยืนยัน periodic job ไม่ถูกเผลอเปลี่ยน:** ใช้ public accessor `core.jobs.periodic_jobs()` / `background_jobs()` (คู่กับ `core.ai.get_tools()`) — เช่น `assert "care_tick" in [fn.__name__ for fn, _ in periodic_jobs()]` กันใครเปลี่ยน `@periodic_job` กลับเป็น `@background_job` แล้วลูปเงียบ
 
+## 9. Multi-tenancy (v0.3.0+)
+
+โมดูล `tenancy` ให้ control plane (`tenant`/`workspace`/`tenant_member`) · primitives ที่โมดูลโดเมนใช้อยู่ที่ **`core.tenancy`** (import ได้ทุกที่ ไม่ผูก path):
+
+```python
+from core.tenancy import TenantScope, scoped, assert_same_tenant, validate_id
+from addons.tenancy.deps import ScopeDep, SessionDep       # dependency สำเร็จรูป
+
+@router.get("/notes")
+async def list_notes(scope: ScopeDep, session: SessionDep):   # ต้องส่ง header X-Tenant-Id
+    stmt = scoped(select(Note), Note, scope)                  # เติม WHERE tenant_id ให้
+    return (await session.execute(stmt)).scalars().all()
+```
+
+**สองด่านเสมอ:** `scoped()` = ด่าน app (query ทุกตัวต้องผ่าน) · **RLS = ด่าน DB กันพลาด** — เปิดที่ตารางข้อมูลโดเมนใน migration:
+
+```python
+from core.tenancy import rls_statements
+
+def upgrade():
+    op.create_table("note", ...)                    # ต้องมีคอลัมน์ tenant_id
+    for stmt in rls_statements("note"):             # นอก guard has_table เสมอ
+        op.execute(stmt)                            # ENABLE + FORCE + policy (idempotent)
+```
+
+> ⚠️ **RLS ถูก bypass เสมอโดย superuser role และ table owner ที่ไม่ตั้ง FORCE** — production **ห้าม**ให้ app เชื่อมต่อ DB ด้วย superuser · `rls_statements()` ตั้ง `FORCE ROW LEVEL SECURITY` ให้เพื่อบังคับกับ owner ด้วย · `get_scope` ตั้ง GUC `pstack.tenant_id` ต่อ transaction ให้อัตโนมัติ (ลืม scope = เห็น 0 แถว ปลอดภัยไว้ก่อน) · พิสูจน์ด้วย conformance test แบบ `tests/test_tenancy.py::test_rls_conformance_postgres`
+
+### Runbook: adopt ตารางเดิมเข้า `tenancy` (deployment ที่มีข้อมูลแล้ว)
+
+initial migration ของ `tenancy` เป็น **idempotent** — เจอตารางชื่อกลาง (`tenant`/`workspace`/`tenant_member`) อยู่แล้วจะข้าม create แล้วให้ alembic บันทึก revision เอง (ไม่ต้อง `stamp` มือ) · แต่ **ต้อง rename ของเดิมให้ครบก่อนเปิดโมดูล** และทำใน **transaction เดียว** (rename ล้มกลางคัน = สภาพผสม migration จะ `raise` เตือน):
+
+```sql
+BEGIN;
+  -- precondition: ยังไม่ adopt + มีของเดิมให้ย้าย
+  DO $$ BEGIN
+    IF to_regclass('public.ap_tenant') IS NULL OR to_regclass('public.tenant') IS NOT NULL
+    THEN RAISE EXCEPTION 'สภาพไม่พร้อม adopt'; END IF;
+  END $$;
+  ALTER TABLE ap_tenant        RENAME TO tenant;
+  ALTER TABLE ap_workspace     RENAME TO workspace;
+  ALTER TABLE ap_tenant_member RENAME TO tenant_member;
+  -- rename ตารางไม่ rename constraint/index — ต้องทำเองให้ตรง canonical ของ kernel:
+  ALTER TABLE tenant_member RENAME CONSTRAINT uq_ap_member TO uq_tenant_member;
+  ALTER INDEX ix_ap_workspace_tenant_id     RENAME TO ix_workspace_tenant_id;
+  ALTER INDEX ix_ap_tenant_member_tenant_id RENAME TO ix_tenant_member_tenant_id;
+  ALTER INDEX ix_ap_tenant_member_user_id   RENAME TO ix_tenant_member_user_id;
+  -- FK/PK: Postgres ตั้งชื่อ <table>_<col>_fkey / <table>_pkey เองตอน rename ตาราง → ตรงอยู่แล้ว
+COMMIT;
+```
+
+ชื่อ canonical ที่ kernel freeze ไว้ (ให้ rename ให้ตรงเป๊ะ ไม่งั้น revision ถัดไปที่ `drop_constraint` จะพังเฉพาะ deployment ที่ adopt):
+
+| ตาราง | PK | unique | index | FK |
+|---|---|---|---|---|
+| `tenant` | `tenant_pkey` | — | — | — |
+| `workspace` | `workspace_pkey` | — | `ix_workspace_tenant_id` | `workspace_tenant_id_fkey` |
+| `tenant_member` | `tenant_member_pkey` | `uq_tenant_member` | `ix_tenant_member_tenant_id`, `ix_tenant_member_user_id` | `tenant_member_tenant_id_fkey` |
+
+จากนั้นเพิ่ม `tenancy` เข้า `PSTACK_MODULES` แล้วบูต — migration ข้าม create ให้เอง · `cli.py stamp <module>` มีไว้สำหรับเคส adopt อื่น/ซ่อม version table (โมดูล idempotent แบบ `tenancy` ไม่ต้องใช้)
+
 ## Checklist ก่อน merge
 
 - [ ] `__manifest__.py` ระบุ `depends` ครบ (ขาดแล้วโมดูลจะโหลดก่อน dependency แล้วพัง)
