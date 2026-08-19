@@ -8,7 +8,7 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | App repo | pstack tag |
 |---|---|
 | pstack-vdo | v0.1.0 |
-| care-agent-platform | v0.3.0 |
+| care-agent-platform | v0.3.1 |
 
 ## v0.3.1 — 2026-08-19
 
