@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from addons.tenancy.services import is_member
 from core.auth import get_current_user
 from core.db import get_session
-from core.tenancy import Principal, TenantScope, set_tenant
+from core.tenancy import Principal, TenantScope, bind_tenant
 
 
 def principal_of(user: Any) -> Principal:
@@ -50,8 +50,9 @@ async def get_scope(
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบ tenant")
 
-    # ตั้ง GUC ให้ RLS ของตารางโดเมนกรองตาม tenant นี้ (Postgres; sqlite เป็น no-op)
-    await set_tenant(session, x_tenant_id)
+    # ผูก GUC กับ session (Postgres; sqlite เป็น no-op) — bind ไม่ใช่ set เพื่อให้รอด
+    # การ commit กลาง request (RLS ของตารางโดเมนยังกรองถูกหลัง service layer commit)
+    await bind_tenant(session, x_tenant_id)
     return TenantScope(
         tenant_id=x_tenant_id,
         principal=principal_of(user),

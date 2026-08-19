@@ -177,7 +177,29 @@ def upgrade():
         op.execute(stmt)                            # ENABLE + FORCE + policy (idempotent)
 ```
 
-> ⚠️ **RLS ถูก bypass เสมอโดย superuser role และ table owner ที่ไม่ตั้ง FORCE** — production **ห้าม**ให้ app เชื่อมต่อ DB ด้วย superuser · `rls_statements()` ตั้ง `FORCE ROW LEVEL SECURITY` ให้เพื่อบังคับกับ owner ด้วย · `get_scope` ตั้ง GUC `pstack.tenant_id` ต่อ transaction ให้อัตโนมัติ (ลืม scope = เห็น 0 แถว ปลอดภัยไว้ก่อน) · พิสูจน์ด้วย conformance test แบบ `tests/test_tenancy.py::test_rls_conformance_postgres`
+> ⚠️ **RLS ถูก bypass เสมอโดย superuser role และ table owner ที่ไม่ตั้ง FORCE** — production **ห้าม**ให้ app เชื่อมต่อ DB ด้วย superuser · `rls_statements()` ตั้ง `FORCE ROW LEVEL SECURITY` ให้เพื่อบังคับกับ owner ด้วย · พิสูจน์ด้วย conformance test แบบ `tests/test_tenancy.py::test_rls_conformance_postgres`
+
+#### ตั้ง GUC ให้ RLS: `bind_tenant()` ไม่ใช่ `set_tenant()`
+
+`get_scope` เรียก **`bind_tenant(session, tenant_id)`** ให้อัตโนมัติต่อ request — มันผูก tenant ไว้กับ **session** แล้วตั้ง GUC ใหม่ทุกครั้งที่ transaction เริ่ม (ผ่าน event `after_begin`) จึง **รอดการ commit กลางทาง**
+
+> 🔴 **`set_tenant()` ตั้ง GUC แค่ transaction เดียว — หายเมื่อ commit** · โค้ดที่ commit แล้วอ่านต่อ หรือ background job ที่วนหลาย tenant แล้ว commit ท้ายรอบ จะเห็น **0 แถวแบบเงียบ ๆ** (RLS deny-by-default ไม่มี error) · care เจอตอนเปิด RLS: เทส 42 ตัวกลายเป็น "ไม่พบผู้ป่วย" (care#4) — **ใช้ `bind_tenant()` เสมอเว้นแต่รู้แน่ว่าอยู่ transaction เดียว**
+
+```python
+# background job — bind ใหม่ต่อ tenant ในลูป
+for tenant_id in tenant_ids:
+    await bind_tenant(session, tenant_id)
+    await do_work(session)         # เห็นเฉพาะ tenant นี้ แม้ commit ระหว่างทาง
+    await session.commit()
+```
+
+#### background job หา tenant จากไหน — ตาราง control plane (ไม่มี RLS)
+
+worker ที่ต้องวนทุก tenant **ห้าม** discover ด้วย `SELECT DISTINCT tenant_id FROM <ตารางโดเมนที่มี RLS>` — ณ จุดนั้นยังไม่มี GUC จะได้ 0 แถวเสมอ · อ่านจากตาราง **`tenant`** ของ kernel ที่ **ตั้งใจไม่เปิด RLS** (control plane) แทน:
+
+```python
+tenant_ids = (await session.execute(select(Tenant.tenant_id))).scalars().all()
+```
 
 ### Runbook: adopt ตารางเดิมเข้า `tenancy` (deployment ที่มีข้อมูลแล้ว)
 

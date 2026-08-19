@@ -20,7 +20,10 @@
 ── RLS ────────────────────────────────────────────────────────────────────
 `scoped()` เป็นด่าน app-level (ทุก query ต้องผ่าน) · RLS เป็นด่าน DB-level กันพลาด
 ตารางที่เก็บข้อมูล tenant ควรเปิด RLS + FORCE ด้วย `rls_statements()` ใน migration
-แล้วตั้ง GUC ต่อ transaction ด้วย `set_tenant()` — policy จะกรองให้เองแม้ลืม scoped()
+แล้วผูก GUC กับ session ด้วย `bind_tenant()` — policy จะกรองให้เองแม้ลืม scoped()
+
+⚠️ `set_tenant()` ตั้ง GUC แค่ transaction ปัจจุบัน (หายเมื่อ commit) — สำหรับ flow ที่
+commit กลางทาง หรือ background job ที่วนหลาย tenant ให้ใช้ `bind_tenant()` ที่ผูกกับ session
 """
 
 from __future__ import annotations
@@ -29,8 +32,12 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import Select, text
+from sqlalchemy import Select, event, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# key บน session.info ที่เก็บ tenant ที่ bind ไว้ — ไม่ใช้ id(session) เป็นคีย์
+# (id ถูกใช้ซ้ำหลัง GC → session ใหม่รับ binding ของ session ที่ตายแล้ว · care#4)
+_BOUND_KEY = "pstack_bound_tenant"
 
 # identity/v1 $defs.Id — ดู docstring ด้านบน ห้ามขยับเดี่ยว
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
@@ -129,13 +136,61 @@ def rls_statements(table: str, tenant_column: str = "tenant_id") -> list[str]:
 
 
 async def set_tenant(session: AsyncSession, tenant_id: str) -> None:
-    """ตั้ง GUC ให้ RLS policy กรองตาม tenant นี้ ใน transaction ปัจจุบัน (Postgres)
+    """ตั้ง GUC ให้ RLS policy กรองตาม tenant นี้ **ใน transaction ปัจจุบันเท่านั้น** (Postgres)
 
     ใช้ set_config(..., is_local=true) → มีผลเฉพาะใน transaction นี้ (ปลอดภัยกับ pool)
     บน sqlite เป็น no-op (ไม่มี RLS/GUC) — scoped() ยังทำงานตามปกติ
+
+    ⚠️ GUC **หายเมื่อ commit** — โค้ดที่ commit กลางทางแล้วอ่านต่อ (หรือ background job
+    ที่วนหลาย tenant แล้ว commit ท้ายรอบ) จะเห็น 0 แถวแบบเงียบ ๆ (RLS deny-by-default)
+    ถ้าจะข้าม transaction ให้ใช้ `bind_tenant()` แทน (care#4)
     """
     if session.bind is not None and session.bind.dialect.name != "postgresql":
         return
     await session.execute(
         text("SELECT set_config(:k, :v, true)"), {"k": TENANT_GUC, "v": tenant_id}
     )
+
+
+def _apply_bound_tenant(sync_session: object, transaction: object, connection: object) -> None:
+    """listener ของ event after_begin — ตั้ง GUC ใหม่ทุกครั้งที่ transaction เริ่ม
+    อ่าน tenant จาก session.info (ไม่ใช่ closure) เพื่อให้ re-bind เปลี่ยน tenant ได้
+    """
+    tenant_id = sync_session.info.get(_BOUND_KEY)  # type: ignore[attr-defined]
+    if tenant_id is None or connection.dialect.name != "postgresql":  # type: ignore[attr-defined]
+        return
+    connection.execute(  # type: ignore[attr-defined]
+        text("SELECT set_config(:k, :v, true)"), {"k": TENANT_GUC, "v": tenant_id}
+    )
+
+
+async def bind_tenant(session: AsyncSession, tenant_id: str) -> None:
+    """ผูก tenant กับ **session** — ตั้ง GUC ใหม่อัตโนมัติทุก transaction (รอด commit)
+
+    ต่างกับ set_tenant() ที่ตั้งครั้งเดียวหายเมื่อ commit · ใช้กับ:
+      - request ที่ service layer commit กลางทางแล้วอ่านต่อ
+      - background job ที่วนทีละ tenant แล้ว commit ท้ายรอบ (bind ใหม่ต่อ tenant)
+
+        await bind_tenant(session, "t-a")
+        await session.commit()
+        ...                      # ยังเห็นข้อมูลของ t-a (GUC ถูกตั้งใหม่ตอน begin transaction ถัดไป)
+
+    เก็บ tenant บน session.info + ติด listener after_begin ครั้งเดียวต่อ session
+    (design จาก care#4 — เก็บบน session.info ไม่ใช่ id(session) เพราะ id ถูกใช้ซ้ำหลัง GC)
+    """
+    session.info[_BOUND_KEY] = tenant_id
+    sync_session = session.sync_session
+    if not event.contains(sync_session, "after_begin", _apply_bound_tenant):
+        event.listen(sync_session, "after_begin", _apply_bound_tenant)
+    # ตั้งให้ transaction ปัจจุบันด้วย (after_begin ของรอบนี้อาจผ่านไปแล้ว) — no-op บน sqlite
+    await set_tenant(session, tenant_id)
+
+
+async def unbind_tenant(session: AsyncSession) -> None:
+    """ยกเลิก binding + ล้าง GUC ใน transaction ปัจจุบัน"""
+    session.info.pop(_BOUND_KEY, None)
+    sync_session = session.sync_session
+    if event.contains(sync_session, "after_begin", _apply_bound_tenant):
+        event.remove(sync_session, "after_begin", _apply_bound_tenant)
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        await session.execute(text("SELECT set_config(:k, '', true)"), {"k": TENANT_GUC})
