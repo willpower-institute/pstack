@@ -142,20 +142,27 @@ def test_stamp_writes_version_without_running_migration():
     asyncio.run(_run())
 
 
+def _pg_url() -> str | None:
+    return os.environ.get("PSTACK_PG_TEST_URL") or os.environ.get("PSTACK_PG_ADMIN_URL")
+
+
 def test_rls_conformance_postgres():
-    """adopt gate: FORCE RLS ทำให้ query ไม่มี WHERE เห็นแค่ tenant ของ GUC — แม้เป็น owner
+    """adopt gate: FORCE RLS ทำให้ query ไม่มี WHERE เห็นแค่ tenant ของ GUC
 
-    รันเฉพาะเมื่อมี Postgres (ตั้ง PSTACK_PG_TEST_URL) — sqlite ไม่มี RLS
-    ทีมรันเทสนี้บน deployment ที่ adopt แล้ว = พิสูจน์ว่าเงื่อนไข ก. ทำงานจริง
+    รันด้วย **connection ของแอปจริง** (`PSTACK_PG_TEST_URL`) — role ที่ deployment ใช้ต่อ DB จริง
+    ไม่ใช่ superuser ที่สร้าง role/SET ROLE เอง (เวอร์ชันก่อนผ่านได้เฉพาะ role ที่ deployment
+    ไม่ควรมี — care ชี้ว่าผลไม่ตอบคำถามเดิม) เทสนี้จึง:
 
-    ⚠️ สำคัญ: RLS **ถูก bypass เสมอ** โดย superuser และโดย table owner ที่ไม่ได้ตั้ง FORCE
-       เทสจึงเชื่อมต่อในบทบาท role ธรรมดา (SET ROLE) ที่เป็น owner ของตาราง —
-       FORCE ROW LEVEL SECURITY คือสิ่งเดียวที่ทำให้ policy บังคับกับ owner ด้วย
-       👉 production ห้ามให้ app เชื่อมต่อด้วย superuser role ไม่งั้น RLS ไร้ผล
+    1. ยืนยันก่อนว่า role นี้ **ไม่ bypass RLS** (rolsuper=false, rolbypassrls=false)
+       — ถ้า bypass แปลว่า gate ตอบไม่ได้ → fail ทันที (พับ db_role_check ของ care เข้ามา)
+    2. สร้างตารางที่ role นี้เป็น **owner** เอง แล้วพิสูจน์ว่า FORCE บังคับ RLS กับ owner จริง
+
+    ไม่ต้องใช้ superuser/CREATE ROLE — role ของแอปสร้าง+เปิด RLS บนตารางของตัวเองได้
+    (ต้องมีสิทธิ์ CREATE บน schema — deployment ให้ไว้อยู่แล้ว)
     """
     pg = os.environ.get("PSTACK_PG_TEST_URL")
     if not pg:
-        pytest.skip("ตั้ง PSTACK_PG_TEST_URL เพื่อรัน RLS conformance (Postgres เท่านั้น)")
+        pytest.skip("ตั้ง PSTACK_PG_TEST_URL (connection ของแอปจริง) เพื่อรัน RLS conformance")
 
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -164,25 +171,34 @@ def test_rls_conformance_postgres():
     async def _run():
         engine = create_async_engine(pg)
         try:
-            # setup ในบทบาท superuser: สร้าง role ธรรมดา + ตาราง แล้วโอน ownership ให้ role นั้น
-            async with engine.begin() as c:
-                await c.execute(sa.text("DROP TABLE IF EXISTS conf_note"))
-                await c.execute(sa.text("DROP ROLE IF EXISTS pstack_app"))
-                await c.execute(sa.text("CREATE ROLE pstack_app NOSUPERUSER"))
-                await c.execute(
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                # (1) gate ตัวจริง: role ที่ใช้ต่อ DB ต้องไม่ bypass RLS ไม่งั้นผลไม่มีความหมาย
+                role, is_super, is_bypass = (
+                    await s.execute(
+                        sa.text(
+                            "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles "
+                            "WHERE rolname = current_user"
+                        )
+                    )
+                ).one()
+                if is_super or is_bypass:
+                    pytest.fail(
+                        f"role '{role}' bypass RLS (super={is_super} bypassrls={is_bypass}) — "
+                        "RLS ไร้ผลกับ role นี้ · deployment ต้องต่อ DB ด้วย role "
+                        "NOSUPERUSER NOBYPASSRLS ไม่งั้น gate ตอบไม่ได้"
+                    )
+
+                # (2) role นี้เป็น owner ตารางเอง → FORCE คือสิ่งที่ทำให้ RLS บังคับกับ owner
+                await s.execute(sa.text("DROP TABLE IF EXISTS conf_note"))
+                await s.execute(
                     sa.text(
                         "CREATE TABLE conf_note (id serial PRIMARY KEY, "
                         "tenant_id text NOT NULL, body text)"
                     )
                 )
                 for stmt in rls_statements("conf_note"):
-                    await c.execute(sa.text(stmt))
-                # โอน ownership ให้ role ธรรมดา (รวม sequence ที่เป็นเจ้าของ) — จำลอง production
-                await c.execute(sa.text("ALTER TABLE conf_note OWNER TO pstack_app"))
-
-            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                # ทำงานในบทบาท role ธรรมดา (owner + FORCE) — RLS บังคับจริง
-                await s.execute(sa.text("SET ROLE pstack_app"))
+                    await s.execute(sa.text(stmt))
+                await s.commit()
 
                 # insert 2 tenant — ต้องตั้ง GUC ให้ตรงก่อน (USING เป็น WITH CHECK ของ INSERT ด้วย)
                 await set_tenant(s, "t-a")
@@ -193,7 +209,7 @@ def test_rls_conformance_postgres():
                 await s.execute(
                     sa.text("INSERT INTO conf_note (tenant_id, body) VALUES ('t-b','b1')")
                 )
-                await s.commit()  # is_local GUC ล้างตอน commit, SET ROLE ยังอยู่
+                await s.commit()
 
                 # GUC = t-a: SELECT ไม่มี WHERE ต้องเห็นแค่ t-a (FORCE บังคับกับ owner)
                 await set_tenant(s, "t-a")
@@ -209,18 +225,55 @@ def test_rls_conformance_postgres():
                 ).scalar_one()
                 assert empty == 0
 
-                await s.execute(sa.text("RESET ROLE"))  # กัน SET ROLE ค้างใน pooled conn
-                await s.commit()  # SET/RESET ROLE เป็น transactional — ต้อง commit ไม่งั้น rollback คืนค่า
+                await s.execute(sa.text("DROP TABLE conf_note"))
+                await s.commit()
         finally:
             await engine.dispose()
 
-        # cleanup ด้วย engine ใหม่ (connection สะอาด บทบาท superuser แน่นอน)
-        cleanup = create_async_engine(pg)
+    asyncio.run(_run())
+
+
+def test_create_tenant_on_postgres():
+    """regression (#1 จาก care): สร้าง tenant ผ่าน services บน Postgres จริง
+
+    เทสเดิมพลาดบั๊กนี้เพราะ tests/ รันบน sqlite (เก็บ datetime เป็น string ไม่สน tz) และ
+    conformance test สร้างตารางด้วย raw SQL ไม่ผ่าน ORM ของ tenancy · เทสนี้เดิน path จริง
+    (migration สร้างตาราง → services.create_tenant เขียนผ่าน ORM) จับ aware/naive mismatch ได้
+    """
+    pg = _pg_url()
+    if not pg:
+        pytest.skip("ตั้ง PSTACK_PG_TEST_URL เพื่อรัน (Postgres เท่านั้น)")
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from addons.tenancy import services
+    from core import migrations
+    from core.loader import discover
+
+    info = discover(["addons"])["tenancy"]
+
+    async def _run():
+        engine = create_async_engine(pg)
         try:
-            async with cleanup.begin() as c:
-                await c.execute(sa.text("DROP TABLE IF EXISTS conf_note"))
-                await c.execute(sa.text("DROP ROLE IF EXISTS pstack_app"))
+            # เริ่มจาก schema สะอาด แล้วสร้างตารางผ่าน "migration จริง" (ไม่ใช่ create_all)
+            async with engine.begin() as c:
+                for t in ("tenant_member", "workspace", "tenant"):
+                    await c.execute(sa.text(f"DROP TABLE IF EXISTS {t} CASCADE"))
+                await c.execute(sa.text("DROP TABLE IF EXISTS alembic_version_tenancy"))
+            await migrations.upgrade_to_head(engine, info)
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                t = await services.create_tenant(s, "pg-clinic", "PG Clinic")
+                await s.commit()
+                # อ่านกลับ — created_at ต้องเป็น aware (timezone=True) ไม่ใช่ naive
+                assert t.tenant_id == "pg-clinic"
+                assert t.created_at.tzinfo is not None
+
+            async with engine.begin() as c:
+                for t in ("tenant_member", "workspace", "tenant"):
+                    await c.execute(sa.text(f"DROP TABLE IF EXISTS {t} CASCADE"))
+                await c.execute(sa.text("DROP TABLE IF EXISTS alembic_version_tenancy"))
         finally:
-            await cleanup.dispose()
+            await engine.dispose()
 
     asyncio.run(_run())

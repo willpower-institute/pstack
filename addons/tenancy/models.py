@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.clock import now as _now
@@ -28,7 +28,7 @@ class Tenant(Base):
     tenant_id: Mapped[str] = mapped_column(String(63), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(255), default="")
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Bangkok")
-    created_at: Mapped[datetime] = mapped_column(default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Workspace(Base):
@@ -43,7 +43,7 @@ class Workspace(Base):
         index=True,
     )
     display_name: Mapped[str] = mapped_column(String(255), default="")
-    created_at: Mapped[datetime] = mapped_column(default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class TenantMember(Base):
@@ -60,4 +60,4 @@ class TenantMember(Base):
     )
     user_id: Mapped[int] = mapped_column(index=True)
     role: Mapped[str] = mapped_column(String(32), default="member")
-    created_at: Mapped[datetime] = mapped_column(default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

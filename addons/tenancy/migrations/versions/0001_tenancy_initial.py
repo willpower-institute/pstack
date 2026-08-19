@@ -26,9 +26,59 @@ depends_on = None
 
 TABLES = ("tenant", "workspace", "tenant_member")
 
+# ชื่อ constraint/index ที่ kernel freeze ไว้ — deployment ที่ adopt ต้อง rename ให้ตรงชุดนี้
+# (rename ตารางไม่ rename constraint/index ให้ · Postgres ตั้ง pk/fk เป็น <ตารางเดิม>_* ค้างไว้)
+# revision ถัดไปที่ drop_constraint จะพังเฉพาะ deployment ที่ adopt ถ้าชื่อไม่ตรง → guard ตอน adopt เลย
+CANONICAL_NAMES = {
+    "tenant": {"tenant_pkey"},
+    "workspace": {"workspace_pkey", "workspace_tenant_id_fkey", "ix_workspace_tenant_id"},
+    "tenant_member": {
+        "tenant_member_pkey",
+        "tenant_member_tenant_id_fkey",
+        "uq_tenant_member",
+        "ix_tenant_member_tenant_id",
+        "ix_tenant_member_user_id",
+    },
+}
+
+
+def _actual_names(insp, table: str) -> set[str]:
+    names: set[str] = set()
+    pk = insp.get_pk_constraint(table).get("name")
+    if pk:
+        names.add(pk)
+    for fk in insp.get_foreign_keys(table):
+        if fk.get("name"):
+            names.add(fk["name"])
+    for uq in insp.get_unique_constraints(table):
+        if uq.get("name"):
+            names.add(uq["name"])
+    for ix in insp.get_indexes(table):
+        if ix.get("name"):
+            names.add(ix["name"])
+    return names
+
+
+def _assert_canonical_names(insp) -> None:
+    """ตอน adopt: ตารางครบแต่ชื่อ constraint/index อาจไม่ตรง canonical (runbook พาไปผิดได้ง่าย)
+    ตรวจบน Postgres แล้ว raise พร้อมรายชื่อที่ขาด — กันไม่ให้เจ็บทีหลังตอน revision ถัดไป
+    """
+    missing: list[str] = []
+    for table, expected in CANONICAL_NAMES.items():
+        actual = _actual_names(insp, table)
+        missing += sorted(expected - actual)
+    if missing:
+        raise RuntimeError(
+            "tenancy adopt: ชื่อ constraint/index ไม่ตรง canonical ของ kernel — ขาด "
+            f"{missing}\n"
+            "rename ตารางไม่ rename constraint/index ให้ · rename ให้ครบใน transaction เดียว "
+            "ก่อนบูต (ดูสูตร + query ตรวจใน docs/MODULE_GUIDE.md §9)"
+        )
+
 
 def upgrade() -> None:
-    insp = sa.inspect(op.get_bind())
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
 
     present = [t for t in TABLES if insp.has_table(t)]
     # guard: adopt ไม่ครบ (บางตารางมี บางตารางไม่มี) — มักเป็นเพราะ rename ล้มกลางคัน
@@ -39,6 +89,10 @@ def upgrade() -> None:
             f"tenancy adopt ไม่สมบูรณ์: เจอ {present} แต่ขาด {missing} — "
             "rename ให้ครบทั้ง 3 ตารางใน transaction เดียวก่อนบูต (docs/MODULE_GUIDE.md)"
         )
+
+    # ตารางครบทั้ง 3 = adopt (ไม่ใช่ deploy ใหม่) — ตรวจชื่อ canonical บน Postgres
+    if len(present) == len(TABLES) and bind.dialect.name == "postgresql":
+        _assert_canonical_names(insp)
 
     if not insp.has_table("tenant"):
         op.create_table(

@@ -193,16 +193,30 @@ BEGIN;
   ALTER TABLE ap_tenant        RENAME TO tenant;
   ALTER TABLE ap_workspace     RENAME TO workspace;
   ALTER TABLE ap_tenant_member RENAME TO tenant_member;
-  -- rename ตารางไม่ rename constraint/index — ต้องทำเองให้ตรง canonical ของ kernel:
-  ALTER TABLE tenant_member RENAME CONSTRAINT uq_ap_member TO uq_tenant_member;
+  -- ⚠️ ALTER TABLE ... RENAME TO เปลี่ยน "แค่ชื่อตาราง" — constraint/index/PK/FK คงชื่อเดิมไว้ทั้งหมด
+  --    (Postgres **ไม่** ตั้งชื่อ <table>_pkey / _fkey ให้ใหม่ตอน rename) ต้อง rename ทุกตัวเองให้ตรง canonical
+  ALTER TABLE tenant        RENAME CONSTRAINT ap_tenant_pkey                  TO tenant_pkey;
+  ALTER TABLE workspace     RENAME CONSTRAINT ap_workspace_pkey               TO workspace_pkey;
+  ALTER TABLE workspace     RENAME CONSTRAINT ap_workspace_tenant_id_fkey     TO workspace_tenant_id_fkey;
+  ALTER TABLE tenant_member RENAME CONSTRAINT ap_tenant_member_pkey           TO tenant_member_pkey;
+  ALTER TABLE tenant_member RENAME CONSTRAINT ap_tenant_member_tenant_id_fkey TO tenant_member_tenant_id_fkey;
+  ALTER TABLE tenant_member RENAME CONSTRAINT uq_ap_member                    TO uq_tenant_member;
   ALTER INDEX ix_ap_workspace_tenant_id     RENAME TO ix_workspace_tenant_id;
   ALTER INDEX ix_ap_tenant_member_tenant_id RENAME TO ix_tenant_member_tenant_id;
   ALTER INDEX ix_ap_tenant_member_user_id   RENAME TO ix_tenant_member_user_id;
-  -- FK/PK: Postgres ตั้งชื่อ <table>_<col>_fkey / <table>_pkey เองตอน rename ตาราง → ตรงอยู่แล้ว
 COMMIT;
 ```
 
-ชื่อ canonical ที่ kernel freeze ไว้ (ให้ rename ให้ตรงเป๊ะ ไม่งั้น revision ถัดไปที่ `drop_constraint` จะพังเฉพาะ deployment ที่ adopt):
+> ชื่อ `ap_*` ด้านซ้ายคือของ consumer แต่ละราย — **สูตรทั่วไปคือ** "rename ทุก constraint/index ของ 3 ตารางให้ตรงชื่อ canonical ด้านล่าง" ไม่ใช่จำชื่อเฉพาะของใคร · หาชื่อเดิมของ deployment ตัวเองด้วย query นี้:
+> ```sql
+> SELECT conrelid::regclass AS tbl, conname FROM pg_constraint
+>  WHERE conrelid = ANY(ARRAY['tenant','workspace','tenant_member']::regclass[])
+> UNION ALL
+> SELECT tablename::regclass, indexname FROM pg_indexes
+>  WHERE tablename IN ('tenant','workspace','tenant_member');
+> ```
+
+ชื่อ canonical ที่ kernel freeze ไว้ (rename ให้ตรงเป๊ะ):
 
 | ตาราง | PK | unique | index | FK |
 |---|---|---|---|---|
@@ -210,7 +224,7 @@ COMMIT;
 | `workspace` | `workspace_pkey` | — | `ix_workspace_tenant_id` | `workspace_tenant_id_fkey` |
 | `tenant_member` | `tenant_member_pkey` | `uq_tenant_member` | `ix_tenant_member_tenant_id`, `ix_tenant_member_user_id` | `tenant_member_tenant_id_fkey` |
 
-จากนั้นเพิ่ม `tenancy` เข้า `PSTACK_MODULES` แล้วบูต — migration ข้าม create ให้เอง · `cli.py stamp <module>` มีไว้สำหรับเคส adopt อื่น/ซ่อม version table (โมดูล idempotent แบบ `tenancy` ไม่ต้องใช้)
+จากนั้นเพิ่ม `tenancy` เข้า `PSTACK_MODULES` แล้วบูต — migration ข้าม create ให้เอง · **ถ้าชื่อ constraint/index ไม่ตรง canonical ตอน adopt migration จะ `raise` ทันที** (ตรวจบน Postgres) ไม่ปล่อยให้ไปพังเงียบ ๆ ที่ revision ถัดไป · `cli.py stamp <module>` มีไว้สำหรับเคส adopt อื่น/ซ่อม version table (โมดูล idempotent แบบ `tenancy` ไม่ต้องใช้)
 
 ## Checklist ก่อน merge
 
