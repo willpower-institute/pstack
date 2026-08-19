@@ -277,3 +277,85 @@ def test_create_tenant_on_postgres():
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_bind_tenant_event_wiring_sqlite():
+    """bind/unbind ต้องทำงานได้ (ไม่ระเบิด) บน sqlite + เก็บ tenant บน session.info"""
+    from core.tenancy import _BOUND_KEY, bind_tenant, unbind_tenant
+    from core.testing import isolated_session
+
+    async def _run():
+        async with isolated_session("sqlite+aiosqlite:///:memory:") as s:
+            await bind_tenant(s, "t-a")
+            assert s.info[_BOUND_KEY] == "t-a"
+            await bind_tenant(s, "t-b")  # re-bind เปลี่ยน tenant ได้
+            assert s.info[_BOUND_KEY] == "t-b"
+            await unbind_tenant(s)
+            assert _BOUND_KEY not in s.info
+
+    asyncio.run(_run())
+
+
+def test_bind_tenant_survives_commit_postgres():
+    """care#4: bind_tenant() คง GUC ข้าม commit · set_tenant() ไม่คง (พิสูจน์ทั้งคู่)"""
+    pg = os.environ.get("PSTACK_PG_TEST_URL")
+    if not pg:
+        pytest.skip("ตั้ง PSTACK_PG_TEST_URL (connection ของแอปจริง) เพื่อรัน")
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from core.tenancy import bind_tenant, rls_statements, set_tenant, unbind_tenant
+
+    async def _run():
+        engine = create_async_engine(pg)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                if (
+                    await s.execute(
+                        sa.text(
+                            "SELECT rolsuper OR rolbypassrls FROM pg_roles "
+                            "WHERE rolname = current_user"
+                        )
+                    )
+                ).scalar_one():
+                    pytest.skip("role นี้ bypass RLS — ดู test_rls_conformance_postgres")
+
+                await s.execute(sa.text("DROP TABLE IF EXISTS conf_note"))
+                await s.execute(
+                    sa.text(
+                        "CREATE TABLE conf_note (id serial PRIMARY KEY, "
+                        "tenant_id text NOT NULL, body text)"
+                    )
+                )
+                for stmt in rls_statements("conf_note"):
+                    await s.execute(sa.text(stmt))
+                await s.commit()
+
+                # --- bind_tenant: insert แล้ว commit แล้วอ่านต่อ ต้องยังเห็นข้อมูล ---
+                await bind_tenant(s, "t-a")
+                await s.execute(
+                    sa.text("INSERT INTO conf_note (tenant_id, body) VALUES ('t-a','a1')")
+                )
+                await s.commit()  # GUC ของ set_tenant จะหายตรงนี้ — แต่ bind ตั้งใหม่ตอน begin
+                rows = (
+                    await s.execute(sa.text("SELECT tenant_id FROM conf_note"))
+                ).scalars().all()
+                assert set(rows) == {"t-a"}, f"bind_tenant ควรคง GUC หลัง commit แต่ได้ {rows}"
+
+                # --- set_tenant (contrast): commit แล้วอ่านต่อ ต้องเห็น 0 แถว (footgun) ---
+                await unbind_tenant(s)
+                await set_tenant(s, "t-a")
+                await s.commit()  # GUC หาย
+                after = (
+                    await s.execute(sa.text("SELECT count(*) FROM conf_note"))
+                ).scalar_one()
+                assert after == 0, f"set_tenant ควรหายหลัง commit (footgun) แต่เห็น {after} แถว"
+
+                await unbind_tenant(s)
+                await bind_tenant(s, "t-a")  # rebind เพื่อ drop (owner + FORCE)
+                await s.execute(sa.text("DROP TABLE conf_note"))
+                await s.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

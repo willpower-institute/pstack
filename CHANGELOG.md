@@ -10,6 +10,21 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.3.0 |
 
+## v0.3.1 — 2026-08-19
+
+จาก care (issue #10 / care#4) — **ไม่มี breaking change** (`set_tenant()` ยังอยู่ · เพิ่ม API ใหม่)
+
+- **`core.tenancy.bind_tenant()` / `unbind_tenant()`** — ผูก tenant กับ **session** แล้วตั้ง GUC
+  ใหม่อัตโนมัติทุก transaction (ผ่าน event `after_begin`) จึง **รอดการ commit กลางทาง** ·
+  `set_tenant()` เดิมตั้ง GUC แค่ transaction เดียว (หายเมื่อ commit) → โค้ดที่ commit แล้วอ่านต่อ
+  หรือ background job ที่วนหลาย tenant เห็น 0 แถวแบบเงียบ ๆ (RLS deny-by-default) · care เจอตอน
+  เปิด RLS: เทส 42 ตัวกลายเป็น "ไม่พบผู้ป่วย"
+  - เก็บ binding บน `session.info` (**ไม่ใช่ `id(session)`** — id ถูกใช้ซ้ำหลัง GC ทำให้ session
+    ใหม่รับ binding ของ session ที่ตายแล้ว · gotcha ที่ care เจอตอนเขียน workaround)
+  - `get_scope` เปลี่ยนมาใช้ `bind_tenant()` → RLS ของตารางโดเมนกรองถูกแม้ service layer commit กลาง request
+- **MODULE_GUIDE §9:** เพิ่มวิธีใช้ `bind_tenant` + คำเตือน footgun ของ `set_tenant` + pattern ให้
+  background job discover tenant จากตาราง `tenant` (control plane ไม่มี RLS) ไม่ใช่ตารางโดเมนที่มี RLS
+
 ## v0.3.0 — 2026-08-19
 
 Phase 5 (multi-tenant) — จาก design ร่วมกับ care-agent-platform (issue #3) · **ไม่มี breaking
