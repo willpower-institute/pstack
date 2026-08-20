@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # กันเดารหัสผ่าน — ตั้ง 0 เพื่อปิด (ไม่แนะนำบนเครื่องที่เปิดสาธารณะ)
     login_rate_limit_per_ip: int = 20          # ต่อ 1 นาที
     login_rate_limit_per_account: int = 5      # ต่อ 5 นาที ต่อหนึ่งอีเมล
+    # เปิด /docs /redoc /openapi.json หรือไม่ — None = ตามค่า debug
+    # (เปิดสาธารณะ = เปิดเผยผังทุก endpoint ทุก schema ให้คนนอกอ่าน)
+    expose_docs: bool | None = None
     admin_email: str = "admin@example.com"
     admin_password: str = "admin"
 
@@ -73,6 +76,10 @@ class Settings(BaseSettings):
             logger.warning("%s", message)
             return self
         raise ValueError(message)
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.debug if self.expose_docs is None else self.expose_docs
 
     @property
     def modules_list(self) -> list[str]:

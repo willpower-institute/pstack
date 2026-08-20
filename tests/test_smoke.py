@@ -1024,6 +1024,26 @@ def test_storage_rejects_oversized_without_leaving_junk(client, monkeypatch):
     monkeypatch.setattr(settings, "max_size_mb", 1, raising=False)
 
     before = set(storage_services.storage_dir().iterdir())
+def test_agent_sse_error_does_not_leak_internals(client, monkeypatch):
+    """เดิมส่ง str(exception) ออกไปตรง ๆ แม้ปิด debug แล้ว
+
+    ตัวอย่างจริงที่เคยหลุด: "Could not resolve authentication method. Expected one of
+    api_key, auth_token, or credentials to be set..." — exception ตัวอื่นในเส้นทางเดียวกัน
+    อาจพ่น connection string หรือ path บนดิสก์ออกไปได้
+    """
+    import json
+
+    from addons.ai_agent import routes as agent_routes
+    from core.config import get_settings
+
+    secret = "postgresql://user:hunter2@db-internal:5432/customers"
+
+    class _Boom:
+        def run_turn(self, *args, **kwargs):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(agent_routes, "get_runtime", lambda: _Boom())
+    monkeypatch.setattr(get_settings(), "debug", False)
 
     token = client.post(
         "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
@@ -1104,3 +1124,15 @@ def test_dummy_hash_is_stable_and_never_matches():
     assert first == user_services._dummy_hash()
     for guess in ("", "admin", "password", "123456"):
         assert verify_password(guess, first) is False
+    sid = client.post("/api/agent/sessions", json={}, headers=headers).json()["id"]
+
+    r = client.post(
+        f"/api/agent/sessions/{sid}/messages", json={"text": "hi"}, headers=headers
+    )
+    body = r.text
+    assert secret not in body, f"ข้อมูลภายในหลุดออกไปกับ SSE: {body}"
+    assert "hunter2" not in body
+
+    payload = json.loads(body.split("data: ", 1)[1].strip())
+    assert payload["error"] == "internal"
+    assert len(payload["ref"]) == 8, "ต้องมีรหัสอ้างอิงไว้ค้นใน log ของ server"
