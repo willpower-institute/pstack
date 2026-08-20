@@ -30,3 +30,7 @@ os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 os.environ["PSTACK_ADMIN_EMAIL"] = "admin@example.com"
 os.environ["PSTACK_ADMIN_PASSWORD"] = "admin"
+# ปิด rate limit ในชุดเทสหลัก (เทสหลายตัวล็อกอินซ้ำ ๆ ด้วยบัญชีเดียวกัน)
+# ตัว rate limit เองมีเทสแยกที่ tests/test_login_rate_limit.py
+os.environ["PSTACK_LOGIN_RATE_LIMIT_PER_IP"] = "0"
+os.environ["PSTACK_LOGIN_RATE_LIMIT_PER_ACCOUNT"] = "0"

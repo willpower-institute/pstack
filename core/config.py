@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     addons_paths: str = "addons"
 
     access_token_expire_minutes: int = 60 * 24
+
+    # กันเดารหัสผ่าน — ตั้ง 0 เพื่อปิด (ไม่แนะนำบนเครื่องที่เปิดสาธารณะ)
+    login_rate_limit_per_ip: int = 20          # ต่อ 1 นาที
+    login_rate_limit_per_account: int = 5      # ต่อ 5 นาที ต่อหนึ่งอีเมล
     admin_email: str = "admin@example.com"
     admin_password: str = "admin"
 
