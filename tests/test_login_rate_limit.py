@@ -100,7 +100,8 @@ def test_warns_when_behind_untrusted_proxy(client, caplog):
     with caplog.at_level("WARNING"):
         r = client.post(
             "/api/auth/login",
-            json={"email": "admin@example.com", "password": "admin"},
+            # ต้องล็อกอินสำเร็จเพื่อผ่าน login path (รหัสตรงกับ conftest หลัง #29 บังคับรหัสแข็งแรง)
+            json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"},
             headers={"X-Forwarded-For": "203.0.113.9"},
         )
     assert r.status_code == 200, r.text
