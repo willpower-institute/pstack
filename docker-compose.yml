@@ -36,6 +36,9 @@ services:
     networks:
       - default
 
+  # ⚠️ ${DB_USER} คือ bootstrap superuser ของ cluster (rolsuper + rolbypassrls)
+  # ถ้าใช้โมดูล tenancy + RLS ห้ามให้ app ต่อ DB ด้วย role นี้ — RLS จะไม่มีผลเลย
+  # สร้าง role แยกด้วย deploy/db-role.sql แล้วชี้ PSTACK_DATABASE_URL มาที่ role นั้น
   db:
     image: postgres:16-alpine
     container_name: pstack-db
