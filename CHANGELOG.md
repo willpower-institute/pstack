@@ -10,14 +10,25 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.3.1 |
 
-## Unreleased
+## v0.4.1 — 2026-08-20
+
+Security follow-ups ต่อจาก v0.4.0 (2 PR: #28, #29)
 
 > ⚠️ **BREAKING (operator):** **ต้องตั้ง `PSTACK_ADMIN_PASSWORD`** เป็นค่ายาว ≥12 ตัว
 > และไม่ใช่ค่าที่เดาได้ ไม่งั้น **ระบบไม่บูต** — กติกาเดียวกับ `PSTACK_SECRET_KEY` ใน v0.4.0
 > · ลำดับการอัปเกรด: แก้ `.env` ให้ผ่านก่อน (ปลดล็อกการบูต) แล้วค่อยรัน
 > `python cli.py set-password <email>` เพื่อเปลี่ยนรหัสจริงในฐานข้อมูล
+>
+> ⚠️ **รันหลัง reverse proxy (#28)? ต้องตั้ง `FORWARDED_ALLOW_IPS`** เป็น IP ของ proxy —
+> ไม่งั้น rate limit ต่อ IP จาก v0.4.0 (#24) จะกลายเป็นลิมิตรวมของทั้งระบบ (ผู้ใช้จริงคนที่ 21
+> ในหนึ่งนาทีโดน 429) · ระบบ log warning ให้เมื่อตรวจพบ · หรือตั้ง `PSTACK_LOGIN_RATE_LIMIT_PER_IP=0`
 
-- **บังคับความแข็งแรงของ `PSTACK_ADMIN_PASSWORD`** — เดิมมี default เป็น `"admin"`
+- **#28 fix rate limit หลัง reverse proxy:** #24 นับ IP จาก `request.client.host` แต่ uvicorn เขียน
+  ค่านั้นจาก `X-Forwarded-For` เฉพาะเมื่อ peer อยู่ใน `FORWARDED_ALLOW_IPS` (default `127.0.0.1`) ·
+  หลัง Caddy peer = IP ของ container → ทุก request นับเป็น IP เดียว → ลิมิตต่อ IP กลายเป็นลิมิตรวม ·
+  เพิ่ม `core.ratelimit.client_ip()` (ไม่ trust XFF เอง — trust proxy ผิด = ช่องโหว่) + log warning
+  ครั้งเดียวเมื่อตรวจพบว่าอยู่หลัง proxy ที่ยังไม่ตั้งค่า
+- **#29 บังคับความแข็งแรงของ `PSTACK_ADMIN_PASSWORD`** — เดิมมี default เป็น `"admin"`
   และมีแค่ warning ตอน install · รวม logic กับ `PSTACK_SECRET_KEY` ไว้ที่ `_reject_weak()`
 - **`python cli.py set-password <email>`** (ใหม่) — เดิม**ไม่มีทางเปลี่ยนรหัสผ่านเลย**
   ทั้ง endpoint และ CLI · `PSTACK_ADMIN_PASSWORD` ใช้แค่ตอนสร้าง admin ครั้งแรก
@@ -38,9 +49,6 @@ Security hardening review ทั้ง framework + ปิด follow-up ของ
 >    `PSTACK_EXPOSE_DOCS=true` ถ้ายังต้องการ
 > 3. ถ้าใช้ RLS + `deploy/db-role.sql`: role ต้อง **เป็นเจ้าของตาราง** (owner) ไม่งั้น
 >    migration ตอนบูตพัง (#20) — สคริปต์อัปเดตให้แล้ว
-> 4. **รันหลัง reverse proxy? ต้องตั้ง `FORWARDED_ALLOW_IPS`** เป็น IP ของ proxy —
->    ไม่งั้น rate limit ต่อ IP จาก #24 จะกลายเป็นลิมิตรวมของทั้งระบบ
->    (ผู้ใช้จริงคนที่ 21 ในหนึ่งนาทีโดน 429) · ระบบจะ log warning ให้เมื่อตรวจพบ
 
 **🔒 Security review (5 PR):**
 - **#22 (critical):** `PSTACK_SECRET_KEY` default `"change-me"` (อยู่บน GitHub) → ปลอม JWT เป็น
