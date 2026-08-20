@@ -17,7 +17,9 @@ API_BASE = "https://api.line.me/v2/bot"
 def verify_signature(channel_secret: str, body: bytes, signature: str | None) -> bool:
     mac = hmac.new(channel_secret.encode(), body, hashlib.sha256)
     expected = base64.b64encode(mac.digest()).decode()
-    return hmac.compare_digest(expected, signature or "")
+    # เทียบเป็น bytes — compare_digest() กับ str ที่มีอักขระ non-ASCII จะ raise TypeError
+    # ทำให้ webhook ตอบ 500 + stack trace แทนที่จะเป็น 400 เมื่อผู้โจมตีส่ง signature มั่ว ๆ
+    return hmac.compare_digest(expected.encode(), (signature or "").encode())
 
 
 def text_message(text: str, quick_menu: list[dict] | None = None) -> dict:
