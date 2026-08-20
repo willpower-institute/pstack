@@ -875,3 +875,103 @@ def test_mcp_tenant_context(client):
     result = call({**admin_h, "X-Tenant-Id": "mcp-t2"})
     assert result["isError"] is False
     assert result["content"][0]["text"] == "tenant=mcp-t2"
+
+
+def test_agent_session_tenant_binding(client):
+    """agent session ผูก tenant ตอนสร้าง — ตรวจ membership ก่อนเสมอ
+
+    เปลี่ยน tenant กลางแชทไม่ได้ ต้องเปิดแชทใหม่ (กันประวัติสองบริบทปนกัน)
+    """
+    admin = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    admin_h = {"Authorization": f"Bearer {admin}"}
+
+    for tid in ("agent-t1", "agent-t2"):
+        assert (
+            client.post(
+                "/api/tenancy/tenants", json={"tenant_id": tid}, headers=admin_h
+            ).status_code
+            == 201
+        )
+    uid = client.post(
+        "/api/users",
+        json={"email": "agentuser@example.com", "password": "pw1234"},
+        headers=admin_h,
+    ).json()["id"]
+    client.post(
+        "/api/tenancy/tenants/agent-t1/members", json={"user_id": uid}, headers=admin_h
+    )
+    token = client.post(
+        "/api/auth/login", json={"email": "agentuser@example.com", "password": "pw1234"}
+    ).json()["access_token"]
+    user_h = {"Authorization": f"Bearer {token}"}
+
+    # ไม่ส่ง header -> ไม่ผูก tenant (deployment ที่ไม่ได้ใช้ tenancy ยังใช้งานได้เหมือนเดิม)
+    r = client.post("/api/agent/sessions", json={}, headers=user_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["tenant_id"] is None
+
+    # เป็นสมาชิก -> ผูกได้
+    r = client.post(
+        "/api/agent/sessions", json={}, headers={**user_h, "X-Tenant-Id": "agent-t1"}
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["tenant_id"] == "agent-t1"
+
+    # ไม่ได้เป็นสมาชิก -> 404 (ไม่ยืนยันว่า tenant มีอยู่จริง)
+    r = client.post(
+        "/api/agent/sessions", json={}, headers={**user_h, "X-Tenant-Id": "agent-t2"}
+    )
+    assert r.status_code == 404
+
+    # superuser ผูกได้ทุก tenant
+    r = client.post(
+        "/api/agent/sessions", json={}, headers={**admin_h, "X-Tenant-Id": "agent-t2"}
+    )
+    assert r.status_code == 201
+    assert r.json()["tenant_id"] == "agent-t2"
+
+
+def test_agent_runtime_binds_tenant_before_calling_tool(monkeypatch):
+    """runtime ต้อง bind tenant ให้ session ก่อนส่งเข้า tool
+
+    ถ้า wiring หลุด tool จะได้ session เปล่า -> เห็นข้อมูลข้าม tenant (ถ้าไม่มี RLS)
+    หรือเห็น 0 แถวเงียบ ๆ (ถ้ามี RLS) ทั้งสองแบบไม่มี error ให้จับ
+    """
+    import asyncio
+
+    from addons.ai_agent import runtime as rt_module
+    from core.ai.tools import ToolDef
+
+    bound: list[str] = []
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def fake_bind(db, tenant_id):
+        bound.append(tenant_id)
+
+    monkeypatch.setattr(rt_module, "bind_tenant", fake_bind)
+    monkeypatch.setattr(rt_module, "get_sessionmaker", lambda: _FakeSession)
+
+    async def _fn(session):
+        return "เรียบร้อย"
+
+    tool = ToolDef(
+        name="t", fn=_fn, module="m", description="", permission=None, input_schema={}
+    )
+    runtime = rt_module.AgentRuntime()
+
+    output, is_error = asyncio.run(runtime._run_tool(tool, {}, "tenant-x"))
+    assert (output, is_error) == ("เรียบร้อย", False)
+    assert bound == ["tenant-x"], "runtime ไม่ได้ bind tenant ให้ session ของ tool"
+
+    # ไม่มี tenant -> ไม่ bind (ปล่อยให้ tool ตัดสินใจเอง / RLS deny by default)
+    bound.clear()
+    asyncio.run(runtime._run_tool(tool, {}, None))
+    assert bound == []

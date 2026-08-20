@@ -14,6 +14,7 @@ import asyncio
 import logging
 
 from addons.ai_agent import services as agent_services
+from addons.ai_agent.models import AgentSession
 from addons.ai_agent.runtime import build_system_prompt, get_runtime
 from addons.line_oa import client as line_client
 from addons.line_oa import services
@@ -164,10 +165,13 @@ async def _run_agent(channel_pk: int, line_user_pk: int, text: str) -> str:
             await db.commit()
         session_id = line_user.agent_session_id
 
+        agent_session = await db.get(AgentSession, session_id)
+        tenant_id = agent_session.tenant_id if agent_session else None
+
         history_rows = await agent_services.list_messages(db, session_id)
         history = [{"role": r.role, "content": r.content} for r in history_rows]
         tools = agent_services.tools_for_user(user)
-        system = build_system_prompt(user, tools) + "\n\n" + LINE_STYLE
+        system = build_system_prompt(user, tools, tenant_id) + "\n\n" + LINE_STYLE
 
     async def save(role: str, content: list, msg_text: str) -> None:
         async with get_sessionmaker()() as db2:
@@ -176,7 +180,7 @@ async def _run_agent(channel_pk: int, line_user_pk: int, text: str) -> str:
     chunks: list[str] = []
     runtime = get_runtime()
     try:
-        async for ev in runtime.run_turn(history, text, tools, system, save):
+        async for ev in runtime.run_turn(history, text, tools, system, save, tenant_id):
             if ev["type"] == "text":
                 chunks.append(ev["delta"])
             elif ev["type"] == "error":

@@ -10,8 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from addons.ai_agent.services import tools_for_user
-from addons.tenancy.services import is_member
+from addons.ai_agent.services import TenantNotAllowed, authorize_tenant, tools_for_user
 from core.db import get_sessionmaker
 from core.tenancy import bind_tenant
 
@@ -36,10 +35,10 @@ async def _call_tool(
         async with get_sessionmaker()() as db:
             if tenant_id:
                 # ตรวจ membership ก่อน bind — ห้ามเชื่อ header ลอย ๆ
-                if not getattr(user, "is_superuser", False) and not await is_member(
-                    db, tenant_id, user.id
-                ):
-                    return f"ไม่มีสิทธิ์ใน tenant: {tenant_id}", True
+                try:
+                    await authorize_tenant(db, user, tenant_id)
+                except TenantNotAllowed as e:
+                    return str(e), True
                 await bind_tenant(db, tenant_id)
             output = await tool.fn(db, **arguments)
         return str(output), False

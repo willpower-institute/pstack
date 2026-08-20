@@ -18,6 +18,9 @@ class AgentSession(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(255), default="")
+    # tenant ที่ผูกกับ session นี้ตอนสร้าง — ทุก tool call ใน session นี้ทำงานในบริบทนี้
+    # None = ไม่ผูก tenant (deployment ที่ไม่ได้ใช้ tenancy หรือ session ของ guest)
+    tenant_id: Mapped[str | None] = mapped_column(String(63), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
