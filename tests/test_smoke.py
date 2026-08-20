@@ -1,19 +1,11 @@
 """Smoke test — บูตทั้งระบบบน sqlite: loader -> install -> auth -> RBAC -> tools"""
 
-import os
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
-os.environ["PSTACK_SECRET_KEY"] = "test-secret"
-os.environ["PSTACK_MODULES"] = (
-    "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server,tenancy,extdemo"
-)
-os.environ["PSTACK_ADDONS_PATHS"] = "addons,tests/ext_addons"  # ทดสอบ external addons path
-os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
-os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
+# env ของชุดเทสตั้งไว้ที่ tests/conftest.py (ต้องตั้งก่อน import core.config)
 
 import pytest
 from fastapi.testclient import TestClient
