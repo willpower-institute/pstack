@@ -10,6 +10,31 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.3.1 |
 
+## v0.3.2 — 2026-08-20
+
+จาก consumer จริง (5 PR ของทีม care/workshop) — **ไม่มี breaking change** (#16 เพิ่ม API แบบ additive)
+
+- **🔒 MCP ส่ง tenant context ถึง AI tool (#16):** เดิม `tool.fn(db, ...)` ส่ง session เปล่าให้ tool —
+  RBAC คุมได้แค่ "เรียก tool ได้ไหม" ไม่คุม "เห็นข้อมูล tenant ไหน" → agent **ข้าม tenant ได้ผ่าน MCP**
+  ทั้งที่ REST บล็อกแล้ว · แก้: `/mcp` รับ `X-Tenant-Id` → ตรวจ membership → `bind_tenant()` ให้ session
+  ก่อนเรียก tool · เพิ่ม `core.tenancy.bound_tenant(session)` ให้ tool อ่าน tenant ที่ชั้นบนผูกไว้ ·
+  **กติกา: tool ห้ามรับ `tenant_id` เป็นพารามิเตอร์** (เท่ากับยกให้ agent เลือก tenant เอง)
+  - ⚠️ ยังเหลือ `ai_agent/runtime.py` (agent ภายใน/LINE bridge) ที่มีช่องเดียวกัน — รอออกแบบว่า
+    agent session ผูก tenant ตอนไหน
+- **🐛 worker ไม่เคย subscribe Redis (#14):** `connect_redis()` ถูกเรียกใน FastAPI lifespan เท่านั้น
+  แต่ ARQ worker ไม่รัน lifespan → handler `@ctx.events.on` ในโปรเซส worker **ไม่เคยรับ event
+  `broadcast=True` เลย** (เงียบ ไม่มี error ทั้งที่ README โฆษณาไว้) · แก้ผ่าน arq `on_startup`/`on_shutdown`
+  hook · ⚠️ ห้าม subclass WorkerSettings (arq อ่าน `settings_cls.__dict__` ตรง ๆ — attribute ที่สืบทอดหาย)
+- **🐛 line_oa signature non-ASCII → 500 (#13):** `hmac.compare_digest()` raise TypeError กับ `str`
+  ที่มีอักขระ non-ASCII → webhook (public endpoint) ตอบ 500 แทน 400 · แก้: เทียบเป็น bytes (ยัง constant-time)
+- **📄 default footgun: compose ให้ app ต่อ DB ด้วย superuser (#17):** `POSTGRES_USER=${DB_USER}` เป็น
+  bootstrap superuser → RLS ทั้งหมดไร้ผล (superuser bypass) แม้ทำตาม §9 ครบ · เพิ่ม `deploy/db-role.sql`
+  (สร้าง role ธรรมดา + ALTER DEFAULT PRIVILEGES) + `deploy/verify-rls.sh` (ตรวจ 5 ขั้น) + คำเตือนใน
+  compose/.env.example/MODULE_GUIDE — ไม่แตะพฤติกรรมโค้ด
+- **🧹 เทส hermetic (#15):** ย้าย env ของชุดเทสไป `tests/conftest.py` — เดิม `test_smoke.py` อ่าน `.env`
+  ของเครื่อง dev (เปลี่ยนรหัส admin ตาม README แล้วเทสแดง) + `lru_cache` settings ทำให้บูต app ได้แค่
+  ไฟล์เทสเดียว · ตอนนี้แยกไฟล์เทสต่อโมดูลได้แล้ว (แก้ `PSTACK_MODULES` ที่ conftest ที่เดียว)
+
 ## v0.3.1 — 2026-08-19
 
 จาก care (issue #10 / care#4) — **ไม่มี breaking change** (`set_tenant()` ยังอยู่ · เพิ่ม API ใหม่)
