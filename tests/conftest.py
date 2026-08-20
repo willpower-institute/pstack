@@ -29,7 +29,12 @@ os.environ["PSTACK_ADDONS_PATHS"] = "addons,tests/ext_addons"  # ทดสอบ
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 os.environ["PSTACK_ADMIN_EMAIL"] = "admin@example.com"
-os.environ["PSTACK_ADMIN_PASSWORD"] = "test-admin-pw-9f3k2x"  # ต้องผ่านกติกาความแข็งแรงของ config
+# แหล่งความจริงเดียวของรหัส admin ในชุดเทส — ไฟล์เทสให้ `from conftest import ADMIN_PASSWORD`
+# อย่า hardcode ซ้ำในไฟล์เทส: PR ที่แตกกิ่งไว้ก่อนรหัสเปลี่ยนจะพาค่าเก่ากลับมาแบบเงียบ ๆ
+# (เคยเกิดจริงตอน merge #28 หลัง #29 — เทสยังผ่านเพราะไม่ได้ assert สถานะ
+#  แต่วิ่งอยู่บน path 401 ทั้งที่ docstring บอกว่าล็อกอินสำเร็จ)
+ADMIN_PASSWORD = "test-admin-pw-9f3k2x"  # ต้องผ่านกติกาความแข็งแรงใน core/config.py
+os.environ["PSTACK_ADMIN_PASSWORD"] = ADMIN_PASSWORD
 # ปิด rate limit ในชุดเทสหลัก (เทสหลายตัวล็อกอินซ้ำ ๆ ด้วยบัญชีเดียวกัน)
 # ตัว rate limit เองมีเทสแยกที่ tests/test_login_rate_limit.py
 os.environ["PSTACK_LOGIN_RATE_LIMIT_PER_IP"] = "0"

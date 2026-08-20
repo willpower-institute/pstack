@@ -6,8 +6,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 # env ของชุดเทสตั้งไว้ที่ tests/conftest.py (ต้องตั้งก่อน import core.config)
-
 import pytest
+from conftest import ADMIN_PASSWORD
 from fastapi.testclient import TestClient
 
 from core.app import create_app
@@ -40,7 +40,7 @@ def test_healthz(client):
 
 def test_login_and_me(client):
     r = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     )
     assert r.status_code == 200, r.text
     token = r.json()["access_token"]
@@ -53,7 +53,7 @@ def test_login_and_me(client):
 
 def test_rbac_and_create_user(client):
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -78,7 +78,7 @@ def test_rbac_and_create_user(client):
 
 def test_storage_flow(client):
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -145,7 +145,7 @@ class FakeStream:
 
 def test_agent_session_and_tools(client):
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -188,7 +188,7 @@ def test_agent_chat_with_tool(client, monkeypatch):
     )
 
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -262,7 +262,7 @@ def line_capture(client):
 
 def test_line_webhook_follow_and_link(client, line_capture):
     admin_token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -375,7 +375,7 @@ def test_line_agent_bridge(client, line_capture, monkeypatch):
 
     # U111 ผูกกับ admin แล้ว -> agent session ต้องเป็นของ admin (title ขึ้นต้น LINE:)
     admin_token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     sessions = client.get(
         "/api/agent/sessions", headers={"Authorization": f"Bearer {admin_token}"}
@@ -426,7 +426,7 @@ def test_agent_chat_page(client):
 
 def test_api_keys(client):
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -471,7 +471,7 @@ def _rpc(client, headers, method, params=None, rpc_id=1):
 
 def test_mcp_server(client):
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     api_key = client.post(
@@ -534,7 +534,7 @@ def test_mcp_server(client):
 def test_tenancy_membership_and_isolation(client):
     """v0.3.0: สร้าง tenant, ผูก member, X-Tenant-Id เป็นด่านบังคับ, non-member โดน 404"""
     admin = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     admin_h = {"Authorization": f"Bearer {admin}"}
 
@@ -825,7 +825,7 @@ def test_mcp_tenant_context(client):
     ทั้งที่ REST บล็อกไว้แล้ว (tool runtime ส่งมาให้แค่ AsyncSession ไม่มี scope)
     """
     admin = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     admin_h = {"Authorization": f"Bearer {admin}"}
 
@@ -883,7 +883,7 @@ def test_agent_session_tenant_binding(client):
     เปลี่ยน tenant กลางแชทไม่ได้ ต้องเปิดแชทใหม่ (กันประวัติสองบริบทปนกัน)
     """
     admin = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     admin_h = {"Authorization": f"Bearer {admin}"}
 
@@ -998,7 +998,7 @@ def test_storage_never_slurps_whole_file_into_memory(client, monkeypatch):
     monkeypatch.setattr(UploadFile, "read", spy_read)
 
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     r = client.post(
         "/api/storage/upload",
@@ -1026,7 +1026,7 @@ def test_storage_rejects_oversized_without_leaving_junk(client, monkeypatch):
     before = set(storage_services.storage_dir().iterdir())
 
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -1044,7 +1044,7 @@ def test_storage_rejects_oversized_without_leaving_junk(client, monkeypatch):
 def test_storage_records_real_size(client):
     """ขนาดที่บันทึกต้องมาจากไบต์ที่เขียนจริง ไม่ใช่ค่าที่ client บอก"""
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     payload = b"x" * 5000
     r = client.post(
@@ -1130,7 +1130,7 @@ def test_agent_sse_error_does_not_leak_internals(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "debug", False)
 
     token = client.post(
-        "/api/auth/login", json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"}
+        "/api/auth/login", json={"email": "admin@example.com", "password": ADMIN_PASSWORD}
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     sid = client.post("/api/agent/sessions", json={}, headers=headers).json()["id"]
