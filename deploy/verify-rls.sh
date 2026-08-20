@@ -31,3 +31,7 @@ psql_app -c "SELECT set_config('pstack.tenant_id','$TENANT',false); SELECT tenan
 
 echo "== 5. ไม่ตั้ง GUC — ต้องเห็น 0 แถว (deny by default) =="
 psql_app -c "SELECT count(*) AS rows_visible FROM $TABLE;"
+
+echo "== 6. role ต้องเป็นเจ้าของตาราง ไม่งั้น app บูตไม่ขึ้นตอนมี migration ใหม่ =="
+psql_owner -c "SELECT tablename, tableowner FROM pg_tables WHERE schemaname='public' AND tableowner <> '$APP_USER' LIMIT 5;"
+echo "   (ต้องได้ 0 rows — ถ้ามีรายชื่อโผล่มา ให้รัน deploy/db-role.sql ซ้ำ)"

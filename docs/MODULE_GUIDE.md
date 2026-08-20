@@ -179,7 +179,9 @@ def upgrade():
 
 > 🔴 **`docker-compose.yml` ที่แถมมาให้ app ต่อ DB ด้วย `${DB_USER}` ซึ่งเป็น bootstrap
 > superuser ของ cluster (`rolsuper = t`, `rolbypassrls = t`) — RLS จะไม่มีผลเลยจนกว่าจะ
-> สร้าง role แยก** · ใช้ [`deploy/db-role.sql`](../deploy/db-role.sql) แล้วพิสูจน์ด้วย
+> สร้าง role แยก** · role ใหม่ต้อง **เป็นเจ้าของตาราง** ด้วย (ไม่ใช่แค่ read/write) เพราะ
+> pstack รัน migration ตอนบูตด้วย connection เส้นเดียวกัน — ไม่งั้น app บูตไม่ขึ้น
+> (`must be owner of table ...`) · owner ไม่ทำให้ RLS หลุดเพราะ `rls_statements()` ตั้ง `FORCE` ไว้ · ใช้ [`deploy/db-role.sql`](../deploy/db-role.sql) แล้วพิสูจน์ด้วย
 > [`deploy/verify-rls.sh`](../deploy/verify-rls.sh) — อย่าเชื่อว่า RLS ทำงานเพราะ migration
 > รันผ่าน มันรันผ่านเสมอ
 >
