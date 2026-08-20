@@ -9,9 +9,8 @@ Revision ID: e53fb8ec8212
 Revises: 12e243579759
 Create Date: 2026-08-20 16:13:08.246501
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = 'e53fb8ec8212'
 down_revision = '12e243579759'
