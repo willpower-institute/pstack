@@ -875,3 +875,55 @@ def test_mcp_tenant_context(client):
     result = call({**admin_h, "X-Tenant-Id": "mcp-t2"})
     assert result["isError"] is False
     assert result["content"][0]["text"] == "tenant=mcp-t2"
+
+
+def test_login_does_not_leak_which_emails_exist(client, monkeypatch):
+    """อีเมลที่ไม่มีบัญชีต้องเสียเวลาเท่ากับอีเมลที่มีบัญชี
+
+    เดิม authenticate() คืนค่าทันทีถ้าหา user ไม่เจอ โดยไม่แตะ bcrypt เลย
+    ทำให้วัดเวลาตอบแล้วแยกออกได้ว่าอีเมลไหนเป็นผู้ใช้จริง (327ms vs 6ms)
+    เทสนี้จับที่พฤติกรรม: ต้องเรียก verify_password ทั้งสองกรณี
+    """
+    from addons.users import services as user_services
+
+    calls: list[str] = []
+    original = user_services.verify_password
+
+    def spy(password: str, password_hash: str) -> bool:
+        calls.append(password_hash)
+        return original(password, password_hash)
+
+    monkeypatch.setattr(user_services, "verify_password", spy)
+
+    calls.clear()
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "ghost-nobody@example.com", "password": "whatever"},
+    )
+    assert r.status_code == 401
+    missing_calls = len(calls)
+
+    calls.clear()
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "definitely-wrong"},
+    )
+    assert r.status_code == 401
+    existing_calls = len(calls)
+
+    assert missing_calls == existing_calls == 1, (
+        f"อีเมลไม่มีจริงเรียก verify_password {missing_calls} ครั้ง "
+        f"แต่อีเมลมีจริงเรียก {existing_calls} ครั้ง — เวลาตอบจะต่างกันจนเดาได้"
+    )
+
+
+def test_dummy_hash_is_stable_and_never_matches():
+    """hash หลอกต้องคงที่ต่อโปรเซส (ไม่งั้นเสียเวลาคำนวณใหม่ทุกครั้ง)
+    และต้องไม่ตรงกับรหัสอะไรที่เดาได้"""
+    from addons.users import services as user_services
+    from core.auth import verify_password
+
+    first = user_services._dummy_hash()
+    assert first == user_services._dummy_hash()
+    for guess in ("", "admin", "password", "123456"):
+        assert verify_password(guess, first) is False
