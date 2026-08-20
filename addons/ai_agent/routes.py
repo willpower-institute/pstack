@@ -1,4 +1,7 @@
 import json
+import logging
+import traceback
+import uuid
 from datetime import datetime
 from typing import Annotated
 
@@ -10,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from addons.ai_agent import services
 from addons.ai_agent.runtime import build_system_prompt, get_runtime
 from core.auth import get_current_user
+from core.config import get_settings
 from core.db import get_session, get_sessionmaker
+
+logger = logging.getLogger(__name__)
 
 # router หลักของโมดูล (loader mount ตัวนี้) — หน้าเว็บอยู่ที่ /agent, API อยู่ใต้ /api/agent
 router = APIRouter(tags=["ai_agent"])
@@ -144,8 +150,16 @@ async def chat(
                 history, data.text, tools, system, save, record.tenant_id
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': 'internal', 'detail': str(e)}, ensure_ascii=False)}\n\n"
+        except Exception:
+            # อย่าส่งข้อความ exception ดิบออกไปให้ client — มันรั่วได้ทั้ง
+            # connection string, path บนดิสก์ หรือ SQL ที่ล้มเหลว
+            # ส่งไปแค่รหัสอ้างอิงที่เอาไปค้นใน log ของ server ได้
+            ref = uuid.uuid4().hex[:8]
+            logger.exception("agent turn ล้มเหลว (ref=%s) session=%s", ref, session_id)
+            payload = {"type": "error", "error": "internal", "ref": ref}
+            if get_settings().debug:
+                payload["detail"] = traceback.format_exc()
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(sse(), media_type="text/event-stream")
 

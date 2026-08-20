@@ -21,24 +21,46 @@ def file_path(record: StoredFile) -> Path:
     return storage_dir() / record.stored_name
 
 
+CHUNK_SIZE = 1024 * 1024
+
+
 async def save_upload(session: AsyncSession, upload: UploadFile, owner_id: int) -> StoredFile:
     settings = get_storage_settings()
-    data = await upload.read()
-    if len(data) > settings.max_size_mb * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"ไฟล์ใหญ่เกิน {settings.max_size_mb}MB")
+    limit = settings.max_size_mb * 1024 * 1024
+    too_big = HTTPException(
+        status_code=413, detail=f"ไฟล์ใหญ่เกิน {settings.max_size_mb}MB"
+    )
+
+    # ด่านที่ 1: ตัดตั้งแต่ก่อนอ่าน — starlette ใส่ size มาให้จาก content-length ของ part
+    if upload.size is not None and upload.size > limit:
+        raise too_big
 
     # กัน path traversal: ใช้เฉพาะ basename และตั้งชื่อเก็บจริงเป็น uuid
     original = os.path.basename(upload.filename or "file")
     suffix = Path(original).suffix[:16]
     stored_name = uuid.uuid4().hex + suffix
+    target = storage_dir() / stored_name
 
-    (storage_dir() / stored_name).write_bytes(data)
+    # ด่านที่ 2: อ่านทีละ chunk แล้วเขียนลงดิสก์เลย ไม่ถือทั้งไฟล์ไว้ใน RAM
+    # (ของเดิมอ่านทั้งก้อนก่อนค่อยเช็คขนาด -> ไฟล์ 600MB ทำ RSS พุ่ง ~600MB
+    #  ทั้งที่สุดท้ายตอบ 413 กลับไป = ใครที่ล็อกอินได้ก็ทำ OOM ให้ server ได้)
+    size = 0
+    try:
+        with target.open("wb") as fh:
+            while chunk := await upload.read(CHUNK_SIZE):
+                size += len(chunk)
+                if size > limit:
+                    raise too_big
+                fh.write(chunk)
+    except BaseException:
+        target.unlink(missing_ok=True)  # ไม่ทิ้งไฟล์ค้างเมื่อยกเลิกกลางคัน
+        raise
 
     record = StoredFile(
         original_name=original,
         stored_name=stored_name,
         mime=upload.content_type or "application/octet-stream",
-        size=len(data),
+        size=size,
         owner_id=owner_id,
     )
     session.add(record)

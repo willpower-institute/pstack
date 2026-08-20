@@ -975,3 +975,173 @@ def test_agent_runtime_binds_tenant_before_calling_tool(monkeypatch):
     bound.clear()
     asyncio.run(runtime._run_tool(tool, {}, None))
     assert bound == []
+
+
+def test_storage_never_slurps_whole_file_into_memory(client, monkeypatch):
+    """ห้ามอ่านทั้งไฟล์เข้า RAM ก่อนเช็คขนาด
+
+    ของเดิมทำ `data = await upload.read()` แล้วค่อยเทียบขนาด — ไฟล์ 600MB
+    ทำ RSS ของ server พุ่งจาก 99MB เป็น 697MB ทั้งที่สุดท้ายตอบ 413
+    (ผู้ใช้ที่ล็อกอินได้คนไหนก็ทำให้ container OOM ได้ และ endpoint นี้ไม่ต้องมี permission)
+
+    เทสนี้จับที่พฤติกรรม: read() ต้องไม่เคยถูกเรียกแบบไม่ระบุขนาด chunk
+    """
+    from starlette.datastructures import UploadFile
+
+    calls: list[tuple] = []
+    original_read = UploadFile.read
+
+    async def spy_read(self, size: int = -1):
+        calls.append((size,))
+        return await original_read(self, size)
+
+    monkeypatch.setattr(UploadFile, "read", spy_read)
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("chunked.bin", b"y" * (2 * 1024 * 1024), "application/octet-stream")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    assert calls, "ไม่ได้เรียก read() เลย?"
+    assert all(size > 0 for (size,) in calls), (
+        f"มีการอ่านทั้งไฟล์รวดเดียว (read({calls}) ) — ต้องอ่านเป็น chunk เท่านั้น"
+    )
+
+
+def test_storage_rejects_oversized_without_leaving_junk(client, monkeypatch):
+    """ไฟล์เกินขนาดต้องถูกปฏิเสธ และต้องไม่ทิ้งไฟล์ค้างไว้บนดิสก์
+
+    ของเดิมอ่านทั้งไฟล์เข้า RAM ก่อนค่อยเช็คขนาด — ไฟล์ใหญ่ทำ RSS พุ่งตามขนาดไฟล์
+    ทั้งที่สุดท้ายตอบ 413 (ผู้ใช้ที่ล็อกอินได้คนไหนก็ทำ OOM ให้ server ได้)
+    """
+    from addons.storage import services as storage_services
+
+    settings = storage_services.get_storage_settings()
+    monkeypatch.setattr(settings, "max_size_mb", 1, raising=False)
+
+    before = set(storage_services.storage_dir().iterdir())
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("big.bin", b"\0" * (3 * 1024 * 1024), "application/octet-stream")},
+        headers=headers,
+    )
+    assert r.status_code == 413, r.text
+
+    after = set(storage_services.storage_dir().iterdir())
+    assert after == before, "ปฏิเสธแล้วแต่ยังทิ้งไฟล์ค้างไว้บนดิสก์"
+
+
+def test_storage_records_real_size(client):
+    """ขนาดที่บันทึกต้องมาจากไบต์ที่เขียนจริง ไม่ใช่ค่าที่ client บอก"""
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    payload = b"x" * 5000
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("size.bin", payload, "application/octet-stream")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["size"] == len(payload)
+
+
+def test_login_does_not_leak_which_emails_exist(client, monkeypatch):
+    """อีเมลที่ไม่มีบัญชีต้องเสียเวลาเท่ากับอีเมลที่มีบัญชี
+
+    เดิม authenticate() คืนค่าทันทีถ้าหา user ไม่เจอ โดยไม่แตะ bcrypt เลย
+    ทำให้วัดเวลาตอบแล้วแยกออกได้ว่าอีเมลไหนเป็นผู้ใช้จริง (327ms vs 6ms)
+    เทสนี้จับที่พฤติกรรม: ต้องเรียก verify_password ทั้งสองกรณี
+    """
+    from addons.users import services as user_services
+
+    calls: list[str] = []
+    original = user_services.verify_password
+
+    def spy(password: str, password_hash: str) -> bool:
+        calls.append(password_hash)
+        return original(password, password_hash)
+
+    monkeypatch.setattr(user_services, "verify_password", spy)
+
+    calls.clear()
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "ghost-nobody@example.com", "password": "whatever"},
+    )
+    assert r.status_code == 401
+    missing_calls = len(calls)
+
+    calls.clear()
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "definitely-wrong"},
+    )
+    assert r.status_code == 401
+    existing_calls = len(calls)
+
+    assert missing_calls == existing_calls == 1, (
+        f"อีเมลไม่มีจริงเรียก verify_password {missing_calls} ครั้ง "
+        f"แต่อีเมลมีจริงเรียก {existing_calls} ครั้ง — เวลาตอบจะต่างกันจนเดาได้"
+    )
+
+
+def test_dummy_hash_is_stable_and_never_matches():
+    """hash หลอกต้องคงที่ต่อโปรเซส (ไม่งั้นเสียเวลาคำนวณใหม่ทุกครั้ง)
+    และต้องไม่ตรงกับรหัสอะไรที่เดาได้"""
+    from addons.users import services as user_services
+    from core.auth import verify_password
+
+    first = user_services._dummy_hash()
+    assert first == user_services._dummy_hash()
+    for guess in ("", "admin", "password", "123456"):
+        assert verify_password(guess, first) is False
+
+
+def test_agent_sse_error_does_not_leak_internals(client, monkeypatch):
+    """เดิมส่ง str(exception) ออกไปตรง ๆ แม้ปิด debug แล้ว
+
+    ตัวอย่างจริงที่เคยหลุด: "Could not resolve authentication method. Expected one of
+    api_key, auth_token, or credentials to be set..." — exception ตัวอื่นในเส้นทางเดียวกัน
+    อาจพ่น connection string หรือ path บนดิสก์ออกไปได้
+    """
+    import json
+
+    from addons.ai_agent import routes as agent_routes
+    from core.config import get_settings
+
+    secret = "postgresql://user:hunter2@db-internal:5432/customers"
+
+    class _Boom:
+        def run_turn(self, *args, **kwargs):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(agent_routes, "get_runtime", lambda: _Boom())
+    monkeypatch.setattr(get_settings(), "debug", False)
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    sid = client.post("/api/agent/sessions", json={}, headers=headers).json()["id"]
+
+    r = client.post(
+        f"/api/agent/sessions/{sid}/messages", json={"text": "hi"}, headers=headers
+    )
+    body = r.text
+    assert secret not in body, f"ข้อมูลภายในหลุดออกไปกับ SSE: {body}"
+    assert "hunter2" not in body
+
+    payload = json.loads(body.split("data: ", 1)[1].strip())
+    assert payload["error"] == "internal"
+    assert len(payload["ref"]) == 8, "ต้องมีรหัสอ้างอิงไว้ค้นใน log ของ server"
