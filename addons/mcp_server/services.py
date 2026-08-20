@@ -11,7 +11,9 @@ import logging
 from typing import Any
 
 from addons.ai_agent.services import tools_for_user
+from addons.tenancy.services import is_member
 from core.db import get_sessionmaker
+from core.tenancy import bind_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,18 @@ def _error(rpc_id: Any, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message}}
 
 
-async def _call_tool(tool, arguments: dict) -> tuple[str, bool]:
+async def _call_tool(
+    tool, arguments: dict, user=None, tenant_id: str | None = None
+) -> tuple[str, bool]:
     try:
         async with get_sessionmaker()() as db:
+            if tenant_id:
+                # ตรวจ membership ก่อน bind — ห้ามเชื่อ header ลอย ๆ
+                if not getattr(user, "is_superuser", False) and not await is_member(
+                    db, tenant_id, user.id
+                ):
+                    return f"ไม่มีสิทธิ์ใน tenant: {tenant_id}", True
+                await bind_tenant(db, tenant_id)
             output = await tool.fn(db, **arguments)
         return str(output), False
     except Exception as e:
@@ -37,7 +48,7 @@ async def _call_tool(tool, arguments: dict) -> tuple[str, bool]:
         return f"tool error: {e}", True
 
 
-async def handle_rpc(user, payload: Any) -> dict | None:
+async def handle_rpc(user, payload: Any, tenant_id: str | None = None) -> dict | None:
     """คืน dict = JSON-RPC response, คืน None = notification (ตอบ 202 เปล่า)"""
     if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":
         return _error(None, -32600, "invalid request (expect single JSON-RPC 2.0 object)")
@@ -83,7 +94,9 @@ async def handle_rpc(user, payload: Any) -> dict | None:
         tool = next((t for t in tools_for_user(user) if t.name == name), None)
         if tool is None:
             return _error(rpc_id, -32602, f"unknown or unauthorized tool: {name}")
-        output, is_error = await _call_tool(tool, arguments)
+        output, is_error = await _call_tool(
+            tool, arguments, user=user, tenant_id=tenant_id
+        )
         return _result(
             rpc_id,
             {"content": [{"type": "text", "text": output}], "isError": is_error},

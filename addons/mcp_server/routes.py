@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.responses import JSONResponse
 
 from addons.mcp_server import services
@@ -13,6 +13,7 @@ router = APIRouter(tags=["mcp"])
 async def mcp_endpoint(
     request: Request,
     user: Annotated[object, Depends(get_current_user)],
+    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-Id")] = None,
 ):
     """MCP Streamable HTTP endpoint — ตัวอย่างต่อจาก Claude Code:
 
@@ -26,7 +27,7 @@ async def mcp_endpoint(
             services._error(None, -32700, "parse error"), status_code=400
         )
 
-    response = await services.handle_rpc(user, payload)
+    response = await services.handle_rpc(user, payload, tenant_id=x_tenant_id)
     if response is None:  # notification — ตอบรับเฉยๆ ตาม spec
         return Response(status_code=202)
     return JSONResponse(response)

@@ -186,6 +186,15 @@ async def bind_tenant(session: AsyncSession, tenant_id: str) -> None:
     await set_tenant(session, tenant_id)
 
 
+def bound_tenant(session: AsyncSession) -> str | None:
+    """tenant ที่ผูกไว้กับ session นี้ (None = ยังไม่ bind)
+
+    ให้โค้ดที่ไม่ได้รับ TenantScope มาตรง ๆ — โดยเฉพาะ AI tool ที่ runtime ส่งมาให้
+    แค่ AsyncSession — อ่าน tenant ที่ชั้นบนตรวจสิทธิ์แล้วผูกไว้ให้ได้
+    """
+    return session.info.get(_BOUND_KEY)
+
+
 async def unbind_tenant(session: AsyncSession) -> None:
     """ยกเลิก binding + ล้าง GUC ใน transaction ปัจจุบัน"""
     session.info.pop(_BOUND_KEY, None)
