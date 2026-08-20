@@ -57,6 +57,8 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 ```bash
 # แบบ Docker (app + postgres + redis)
 cp .env.example .env
+# ต้องตั้ง PSTACK_SECRET_KEY ก่อน ไม่งั้นระบบจะไม่ยอมบูต (JWT ทั้งระบบเซ็นด้วยคีย์นี้)
+echo "PSTACK_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
 docker compose up -d --build
 curl http://localhost:8000/healthz
 
