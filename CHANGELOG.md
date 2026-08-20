@@ -10,6 +10,40 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.3.1 |
 
+## v0.4.0 — 2026-08-20
+
+Security hardening review ทั้ง framework + ปิด follow-up ของ v0.3.2 (8 PR: #19–#26)
+
+> ⚠️ **BREAKING (operator) — ต้องทำก่อน/หลัง upgrade:**
+> 1. **ต้องตั้ง `PSTACK_SECRET_KEY`** เป็นค่าสุ่มยาว ≥32 ตัว ไม่งั้น **ระบบไม่บูต** (#22) —
+>    `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`
+> 2. **`/docs` `/redoc` `/openapi.json` ปิดเมื่อ `PSTACK_DEBUG=false`** (#26) — ตั้ง
+>    `PSTACK_EXPOSE_DOCS=true` ถ้ายังต้องการ
+> 3. ถ้าใช้ RLS + `deploy/db-role.sql`: role ต้อง **เป็นเจ้าของตาราง** (owner) ไม่งั้น
+>    migration ตอนบูตพัง (#20) — สคริปต์อัปเดตให้แล้ว
+
+**🔒 Security review (5 PR):**
+- **#22 (critical):** `PSTACK_SECRET_KEY` default `"change-me"` (อยู่บน GitHub) → ปลอม JWT เป็น
+  admin ได้โดยไม่ต้องรู้รหัส · ตอนนี้ปฏิเสธการบูตถ้าคีย์อ่อน/สั้นกว่า 32 (debug=true รันได้พร้อม warning)
+- **#23 (high):** upload อ่านทั้งไฟล์เข้า RAM ก่อนเช็คขนาด → OOM DoS · เช็ค `upload.size` ก่อน +
+  สตรีมทีละ 1MB (600MB: RSS 713MB → 94MB) · size ที่บันทึกมาจากไบต์จริง
+- **#24 (high):** `/api/auth/login` ไม่มี rate limit → เดารหัสไม่จำกัด + bcrypt CPU DoS ·
+  เพิ่ม `core/ratelimit.py` (Redis fixed-window, fallback in-process) — ต่อ IP 20/นาที +
+  ต่อบัญชี 5/5นาที (นับเฉพาะครั้งล้มเหลว) · 429 + Retry-After · ตั้ง 0 = ปิด
+- **#25 (medium):** timing attack — ไม่เจอ user ตอบ 6ms/เจอ 327ms → กวาดอีเมลได้ ·
+  hash dummy (lru_cache) ให้เวลาเท่ากัน
+- **#26 (medium):** `/docs` เปิดสาธารณะเสมอ → ผูกกับ `expose_docs` · เพิ่ม security header
+  (`X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy`) · SSE ไม่ส่ง exception ดิบออก client
+
+**🔧 Follow-ups (ปิดของค้างจาก v0.3.2):**
+- **#19:** ผูก tenant กับ **agent session ตอนสร้าง** (ปิดช่องข้าม tenant ของ agent ภายใน/LINE ที่ #16
+  แก้แค่ฝั่ง MCP) — bind ครั้งเดียวตอนสร้าง (ไม่ใช่ต่อ turn เพราะแชทมีประวัติ) + ตรวจ membership ซ้ำ
+  ทุก turn · `agent_sessions.tenant_id` nullable (session เดิม = NULL = พฤติกรรมเดิม) · รวม
+  `authorize_tenant()` ให้ mcp ใช้ร่วม · **`ai_agent` → v1.1.0** (มี migration)
+- **#20:** `deploy/db-role.sql` ต้องให้ role เป็น owner ตาราง (owner≠superuser · FORCE RLS ยังกรอง owner)
+- **#21:** template migration (`_SCRIPT_MAKO`) สร้างไฟล์ที่ ruff I001 ไม่ผ่าน → CI แดงทุกครั้งที่เพิ่ม
+  migration · แก้ที่ต้นทาง + สำเนาใน 7 โมดูล
+
 ## v0.3.2 — 2026-08-20
 
 จาก consumer จริง (5 PR ของทีม care/workshop) — **ไม่มี breaking change** (#16 เพิ่ม API แบบ additive)
