@@ -21,6 +21,9 @@ Security hardening review ทั้ง framework + ปิด follow-up ของ
 >    `PSTACK_EXPOSE_DOCS=true` ถ้ายังต้องการ
 > 3. ถ้าใช้ RLS + `deploy/db-role.sql`: role ต้อง **เป็นเจ้าของตาราง** (owner) ไม่งั้น
 >    migration ตอนบูตพัง (#20) — สคริปต์อัปเดตให้แล้ว
+> 4. **รันหลัง reverse proxy? ต้องตั้ง `FORWARDED_ALLOW_IPS`** เป็น IP ของ proxy —
+>    ไม่งั้น rate limit ต่อ IP จาก #24 จะกลายเป็นลิมิตรวมของทั้งระบบ
+>    (ผู้ใช้จริงคนที่ 21 ในหนึ่งนาทีโดน 429) · ระบบจะ log warning ให้เมื่อตรวจพบ
 
 **🔒 Security review (5 PR):**
 - **#22 (critical):** `PSTACK_SECRET_KEY` default `"change-me"` (อยู่บน GitHub) → ปลอม JWT เป็น

@@ -12,7 +12,7 @@ from addons.users.models import User
 from core.auth import create_access_token, get_current_user, require_permission
 from core.config import get_settings
 from core.db import get_session
-from core.ratelimit import RateLimited, check_rate_limit
+from core.ratelimit import RateLimited, check_rate_limit, client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +52,12 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenOut:
     settings = get_settings()
-    client_ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     acct_key = f"login:acct:{data.email.lower()}"
     try:
         # ต่อ IP นับทุกครั้ง — กันคนเดียวไล่ยิงหลายบัญชี (credential stuffing)
         await check_rate_limit(
-            f"login:ip:{client_ip}", settings.login_rate_limit_per_ip, 60
+            f"login:ip:{ip}", settings.login_rate_limit_per_ip, 60
         )
         # ต่อบัญชีนับเฉพาะครั้งที่ล้มเหลว — ผู้ใช้จริงที่ล็อกอินถูกไม่โดนกวน
         # เช็คก่อนเรียก authenticate() เพราะ bcrypt กิน CPU ~300ms ต่อครั้ง
@@ -65,7 +65,7 @@ async def login(
             acct_key, settings.login_rate_limit_per_account, 300, increment=False
         )
     except RateLimited as e:
-        logger.warning("login ถูกจำกัดอัตรา ip=%s email=%s", client_ip, data.email)
+        logger.warning("login ถูกจำกัดอัตรา ip=%s email=%s", ip, data.email)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="พยายามเข้าสู่ระบบถี่เกินไป ลองใหม่อีกครั้งภายหลัง",
@@ -75,7 +75,7 @@ async def login(
     user = await services.authenticate(session, data.email, data.password)
     if user is None or not user.is_active:
         # เดิมไม่มี log อะไรเลย — ตรวจย้อนหลังว่าถูกเดารหัสไม่ได้
-        logger.warning("login ล้มเหลว ip=%s email=%s", client_ip, data.email)
+        logger.warning("login ล้มเหลว ip=%s email=%s", ip, data.email)
         with contextlib.suppress(RateLimited):
             # นับความล้มเหลวไว้ ครั้งถัดไปจะโดนกันตั้งแต่ก่อนเรียก bcrypt
             await check_rate_limit(
