@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 os.environ["PSTACK_DATABASE_URL"] = "sqlite+aiosqlite:///./test_pstack.db"
-os.environ["PSTACK_SECRET_KEY"] = "test-secret"
+os.environ["PSTACK_SECRET_KEY"] = "test-key-" + "x" * 40  # ต้องยาวพอตามที่ config บังคับ
 os.environ["PSTACK_MODULES"] = (
     "users,storage,ai_agent,line_oa,faq,api_keys,mcp_server,tenancy,extdemo"
 )
