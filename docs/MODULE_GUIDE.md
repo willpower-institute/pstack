@@ -177,6 +177,12 @@ def upgrade():
         op.execute(stmt)                            # ENABLE + FORCE + policy (idempotent)
 ```
 
+> 🔴 **`docker-compose.yml` ที่แถมมาให้ app ต่อ DB ด้วย `${DB_USER}` ซึ่งเป็น bootstrap
+> superuser ของ cluster (`rolsuper = t`, `rolbypassrls = t`) — RLS จะไม่มีผลเลยจนกว่าจะ
+> สร้าง role แยก** · ใช้ [`deploy/db-role.sql`](../deploy/db-role.sql) แล้วพิสูจน์ด้วย
+> [`deploy/verify-rls.sh`](../deploy/verify-rls.sh) — อย่าเชื่อว่า RLS ทำงานเพราะ migration
+> รันผ่าน มันรันผ่านเสมอ
+>
 > ⚠️ **RLS ถูก bypass เสมอโดย superuser role และ table owner ที่ไม่ตั้ง FORCE** — production **ห้าม**ให้ app เชื่อมต่อ DB ด้วย superuser · `rls_statements()` ตั้ง `FORCE ROW LEVEL SECURITY` ให้เพื่อบังคับกับ owner ด้วย · พิสูจน์ด้วย conformance test แบบ `tests/test_tenancy.py::test_rls_conformance_postgres`
 
 #### ตั้ง GUC ให้ RLS: `bind_tenant()` ไม่ใช่ `set_tenant()`
