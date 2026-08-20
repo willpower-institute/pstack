@@ -50,7 +50,7 @@ def test_failed_logins_get_blocked_after_limit(client, limits):
 def test_successful_login_is_not_counted(client, limits):
     """ผู้ใช้จริงที่ล็อกอินถูกต้องซ้ำ ๆ ต้องไม่โดนกวน — นับเฉพาะครั้งที่ล้มเหลว"""
     for _ in range(6):
-        r = _login(client, password="admin")
+        r = _login(client, password="test-admin-pw-9f3k2x")
         assert r.status_code == 200, r.text
 
 
@@ -86,3 +86,50 @@ def test_check_rate_limit_peek_does_not_count():
         await reset()
 
     asyncio.run(scenario())
+
+
+def test_warns_when_behind_untrusted_proxy(client, caplog):
+    """อยู่หลัง proxy ที่ยังไม่ได้ตั้ง FORWARDED_ALLOW_IPS = ลิมิตต่อ IP กลายเป็นลิมิตรวม
+
+    uvicorn เขียน request.client ใหม่จาก X-Forwarded-For ให้เฉพาะเมื่อ peer อยู่ใน
+    FORWARDED_ALLOW_IPS (ค่าเริ่มต้น 127.0.0.1) — deploy ใน Docker หลัง Caddy จะไม่เข้าเงื่อนไข
+    ทำให้ทุกคนถูกนับรวมเป็น IP เดียว ตรวจไม่เจอตอนเทสเพราะ TestClient ไม่ได้ผ่าน proxy
+    ต้องมี warning ให้ operator เห็นตอนรันจริง
+    """
+    asyncio.run(reset())
+    with caplog.at_level("WARNING"):
+        r = client.post(
+            "/api/auth/login",
+            # ต้องล็อกอินสำเร็จเพื่อผ่าน login path (รหัสตรงกับ conftest หลัง #29 บังคับรหัสแข็งแรง)
+            json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"},
+            headers={"X-Forwarded-For": "203.0.113.9"},
+        )
+    assert r.status_code == 200, r.text
+    assert any("FORWARDED_ALLOW_IPS" in rec.getMessage() for rec in caplog.records), (
+        "มี X-Forwarded-For แต่ client ไม่ตรง — ต้องเตือน operator"
+    )
+
+
+def test_no_warning_when_proxy_is_trusted(client, caplog):
+    """ตั้งค่าถูกแล้ว (uvicorn เขียน client ให้ตรงกับ XFF) ต้องไม่รบกวนด้วย warning"""
+    asyncio.run(reset())
+    with caplog.at_level("WARNING"):
+        client.post(
+            "/api/auth/login",
+            json={"email": "admin@example.com", "password": "admin"},
+            headers={"X-Forwarded-For": "testclient"},  # TestClient ใช้ host นี้
+        )
+    assert not any(
+        "FORWARDED_ALLOW_IPS" in rec.getMessage() for rec in caplog.records
+    ), "ตั้งค่าถูกแล้วยังเตือนอยู่ — จะกลายเป็น warning ที่คนเลิกอ่าน"
+
+
+def test_no_warning_without_proxy_header(client, caplog):
+    """ไม่ได้อยู่หลัง proxy เลย ก็ต้องไม่เตือน"""
+    asyncio.run(reset())
+    with caplog.at_level("WARNING"):
+        client.post(
+            "/api/auth/login",
+            json={"email": "admin@example.com", "password": "admin"},
+        )
+    assert not any("FORWARDED_ALLOW_IPS" in rec.getMessage() for rec in caplog.records)

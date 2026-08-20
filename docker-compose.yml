@@ -16,6 +16,8 @@ services:
     networks:
       - default
       # deploy จริงบนเซิร์ฟเวอร์ (หลัง Caddy) ให้เปิดบรรทัดล่างและลบ ports: ด้านบน
+      # ⚠️ อย่าลืมตั้ง FORWARDED_ALLOW_IPS ใน .env ให้เป็น IP ของ Caddy ด้วย
+      #    ไม่งั้น rate limit ต่อ IP จะกลายเป็นลิมิตรวมทั้งระบบ (ดู .env.example)
       # - odoo-public
 
   worker:

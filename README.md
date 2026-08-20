@@ -57,8 +57,9 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 ```bash
 # แบบ Docker (app + postgres + redis)
 cp .env.example .env
-# ต้องตั้ง PSTACK_SECRET_KEY ก่อน ไม่งั้นระบบจะไม่ยอมบูต (JWT ทั้งระบบเซ็นด้วยคีย์นี้)
+# ต้องตั้งสองค่านี้ก่อน ไม่งั้นระบบจะไม่ยอมบูต
 echo "PSTACK_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+echo "PSTACK_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')" >> .env
 docker compose up -d --build
 curl http://localhost:8000/healthz
 
@@ -74,7 +75,8 @@ python cli.py makemigration <module> -m "..."   # สร้าง alembic revisi
 python cli.py migrate                  # apply migrations + install/upgrade ทุกโมดูล
 ```
 
-Login แรก: `admin@example.com` / `admin` (ตั้งค่าผ่าน `PSTACK_ADMIN_EMAIL`/`PSTACK_ADMIN_PASSWORD` — เปลี่ยนใน production)
+Login แรก: `admin@example.com` + รหัสที่ตั้งไว้ใน `PSTACK_ADMIN_PASSWORD`
+(ค่านี้ใช้แค่ตอนสร้างบัญชีครั้งแรก — เปลี่ยนรหัสของบัญชีที่มีอยู่แล้วด้วย `python cli.py set-password <email>`)
 
 ## การเขียนโมดูล
 
