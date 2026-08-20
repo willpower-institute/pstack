@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import pytest
+from conftest import ADMIN_PASSWORD
 from fastapi.testclient import TestClient
 
 from core.app import create_app
@@ -50,7 +51,7 @@ def test_failed_logins_get_blocked_after_limit(client, limits):
 def test_successful_login_is_not_counted(client, limits):
     """ผู้ใช้จริงที่ล็อกอินถูกต้องซ้ำ ๆ ต้องไม่โดนกวน — นับเฉพาะครั้งที่ล้มเหลว"""
     for _ in range(6):
-        r = _login(client, password="test-admin-pw-9f3k2x")
+        r = _login(client, password=ADMIN_PASSWORD)
         assert r.status_code == 200, r.text
 
 
@@ -100,8 +101,7 @@ def test_warns_when_behind_untrusted_proxy(client, caplog):
     with caplog.at_level("WARNING"):
         r = client.post(
             "/api/auth/login",
-            # ต้องล็อกอินสำเร็จเพื่อผ่าน login path (รหัสตรงกับ conftest หลัง #29 บังคับรหัสแข็งแรง)
-            json={"email": "admin@example.com", "password": "test-admin-pw-9f3k2x"},
+            json={"email": "admin@example.com", "password": ADMIN_PASSWORD},
             headers={"X-Forwarded-For": "203.0.113.9"},
         )
     assert r.status_code == 200, r.text
@@ -114,11 +114,13 @@ def test_no_warning_when_proxy_is_trusted(client, caplog):
     """ตั้งค่าถูกแล้ว (uvicorn เขียน client ให้ตรงกับ XFF) ต้องไม่รบกวนด้วย warning"""
     asyncio.run(reset())
     with caplog.at_level("WARNING"):
-        client.post(
+        r = client.post(
             "/api/auth/login",
-            json={"email": "admin@example.com", "password": "admin"},
+            json={"email": "admin@example.com", "password": ADMIN_PASSWORD},
             headers={"X-Forwarded-For": "testclient"},  # TestClient ใช้ host นี้
         )
+    # assert สถานะด้วย — ไม่งั้นรหัสผิดจะทำให้เทสวิ่งบน path 401 โดยยังผ่านเหมือนเดิม
+    assert r.status_code == 200, r.text
     assert not any(
         "FORWARDED_ALLOW_IPS" in rec.getMessage() for rec in caplog.records
     ), "ตั้งค่าถูกแล้วยังเตือนอยู่ — จะกลายเป็น warning ที่คนเลิกอ่าน"
@@ -128,8 +130,9 @@ def test_no_warning_without_proxy_header(client, caplog):
     """ไม่ได้อยู่หลัง proxy เลย ก็ต้องไม่เตือน"""
     asyncio.run(reset())
     with caplog.at_level("WARNING"):
-        client.post(
+        r = client.post(
             "/api/auth/login",
-            json={"email": "admin@example.com", "password": "admin"},
+            json={"email": "admin@example.com", "password": ADMIN_PASSWORD},
         )
+    assert r.status_code == 200, r.text
     assert not any("FORWARDED_ALLOW_IPS" in rec.getMessage() for rec in caplog.records)
