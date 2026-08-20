@@ -816,3 +816,62 @@ def test_tool_registry():
     schema = tools["search_users"].input_schema
     assert schema["properties"]["query"]["type"] == "string"
     assert "query" in schema["required"]
+
+
+def test_mcp_tenant_context(client):
+    """MCP ส่ง tenant context ลงไปถึง tool — และตรวจ membership ก่อนเสมอ
+
+    ถ้าไม่ผูก tenant ให้ session ของ tool ข้อมูลของ tenant อื่นจะหลุดผ่าน AI
+    ทั้งที่ REST บล็อกไว้แล้ว (tool runtime ส่งมาให้แค่ AsyncSession ไม่มี scope)
+    """
+    admin = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    admin_h = {"Authorization": f"Bearer {admin}"}
+
+    for tid in ("mcp-t1", "mcp-t2"):
+        assert (
+            client.post(
+                "/api/tenancy/tenants", json={"tenant_id": tid}, headers=admin_h
+            ).status_code
+            == 201
+        )
+
+    uid = client.post(
+        "/api/users",
+        json={"email": "mcpuser@example.com", "password": "pw1234"},
+        headers=admin_h,
+    ).json()["id"]
+    assert (
+        client.post(
+            "/api/tenancy/tenants/mcp-t1/members", json={"user_id": uid}, headers=admin_h
+        ).status_code
+        == 201
+    )
+    member = client.post(
+        "/api/auth/login", json={"email": "mcpuser@example.com", "password": "pw1234"}
+    ).json()["access_token"]
+    member_h = {"Authorization": f"Bearer {member}"}
+
+    def call(headers):
+        return _rpc(
+            client, headers, "tools/call", {"name": "whoami_tenant", "arguments": {}}
+        ).json()["result"]
+
+    # เป็นสมาชิก -> tool เห็น tenant ที่ผูกมา
+    result = call({**member_h, "X-Tenant-Id": "mcp-t1"})
+    assert result["isError"] is False
+    assert result["content"][0]["text"] == "tenant=mcp-t1"
+
+    # ไม่ได้เป็นสมาชิก -> ปฏิเสธก่อนเรียก tool
+    result = call({**member_h, "X-Tenant-Id": "mcp-t2"})
+    assert result["isError"] is True
+    assert "mcp-t2" in result["content"][0]["text"]
+
+    # ไม่ส่ง header -> ไม่ผูก tenant ให้ (tool ตัดสินใจเองว่าจะทำอะไรต่อ)
+    assert call(member_h)["content"][0]["text"] == "tenant=none"
+
+    # superuser เข้าได้ทุก tenant
+    result = call({**admin_h, "X-Tenant-Id": "mcp-t2"})
+    assert result["isError"] is False
+    assert result["content"][0]["text"] == "tenant=mcp-t2"
