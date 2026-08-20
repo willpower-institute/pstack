@@ -179,6 +179,55 @@ def migrate() -> None:
     typer.secho("migrate เสร็จ", fg="green")
 
 
+@app.command(name="set-password")
+def set_password(
+    email: str,
+    password: str = typer.Option(
+        None, "--password", prompt=True, hide_input=True, confirmation_prompt=True
+    ),
+) -> None:
+    """เปลี่ยนรหัสผ่านของผู้ใช้ (รวมถึง admin)
+
+    PSTACK_ADMIN_PASSWORD ใช้แค่ตอน "สร้าง" admin คนแรกเท่านั้น — แก้ค่าใน .env
+    ทีหลังไม่ได้เปลี่ยนรหัสจริงในฐานข้อมูล ต้องใช้คำสั่งนี้
+    """
+    from core.app import create_app
+
+    create_app()
+
+    from addons.users import services
+    from core.auth import hash_password
+    from core.config import (
+        MIN_ADMIN_PASSWORD_LENGTH,
+        WEAK_ADMIN_PASSWORDS,
+    )
+    from core.db import dispose_engine, get_sessionmaker
+
+    if password in WEAK_ADMIN_PASSWORDS or len(password) < MIN_ADMIN_PASSWORD_LENGTH:
+        typer.secho(
+            f"รหัสผ่านอ่อนเกินไป — ต้องยาวอย่างน้อย {MIN_ADMIN_PASSWORD_LENGTH} ตัวอักษร "
+            "และไม่ใช่ค่าที่เดาได้ทันที",
+            fg="red",
+        )
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        try:
+            async with get_sessionmaker()() as session:
+                user = await services.get_by_email(session, email)
+                if user is None:
+                    typer.secho(f"ไม่พบผู้ใช้ {email}", fg="red")
+                    raise typer.Exit(1)
+                user.password_hash = hash_password(password)
+                await session.commit()
+        finally:
+            await dispose_engine()
+
+    asyncio.run(_run())
+    typer.secho(f"เปลี่ยนรหัสผ่านของ {email} แล้ว", fg="green")
+    typer.echo("token เดิมที่ออกไปแล้วยังใช้ได้จนหมดอายุ (JWT ไม่มีกลไกเพิกถอน)")
+
+
 MANIFEST_TMPL = '''{{
     "name": "{name}",
     "version": "0.1.0",

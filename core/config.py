@@ -20,6 +20,24 @@ WEAK_SECRET_KEYS = frozenset(
 )
 MIN_SECRET_KEY_LENGTH = 32
 
+# รหัส admin คนแรก — ค่าที่เดาได้ทันทีหรือเคยเป็น default
+WEAK_ADMIN_PASSWORDS = frozenset(
+    {
+        "",
+        "admin",
+        "admin123",
+        "password",
+        "passw0rd",
+        "123456",
+        "12345678",
+        "changeme",
+        "change-me",
+        "pstack",
+        "secret",
+    }
+)
+MIN_ADMIN_PASSWORD_LENGTH = 12
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PSTACK_", env_file=".env", extra="ignore")
@@ -45,37 +63,50 @@ class Settings(BaseSettings):
     # (เปิดสาธารณะ = เปิดเผยผังทุก endpoint ทุก schema ให้คนนอกอ่าน)
     expose_docs: bool | None = None
     admin_email: str = "admin@example.com"
-    admin_password: str = "admin"
+    # ไม่มี default ที่ใช้งานได้ — ใช้ตอนสร้าง admin คนแรกเท่านั้น
+    admin_password: str = ""
 
-    @model_validator(mode="after")
-    def _validate_secret_key(self) -> "Settings":
-        """ปฏิเสธการบูตถ้า secret key อ่อนแอ — JWT ทั้งระบบเซ็นด้วยคีย์นี้
-
-        คีย์ที่เดาได้ = ใครก็ปลอม token เป็น user id ไหนก็ได้ รวมถึง superuser
-        โดยไม่ต้องรู้รหัสผ่านอะไรเลย ต่อให้ตั้งรหัส admin ไว้แน่นหนาแค่ไหน
-        """
-        key = self.secret_key
-        if key not in WEAK_SECRET_KEYS and len(key) >= MIN_SECRET_KEY_LENGTH:
-            return self
+    def _reject_weak(
+        self, value: str, env_name: str, weak: frozenset[str], min_length: int, why: str
+    ) -> None:
+        """ปฏิเสธการบูตถ้าค่าอ่อนแอ — debug=true เตือนแต่ยังรันต่อได้ (dev)"""
+        if value not in weak and len(value) >= min_length:
+            return
 
         reason = (
             "ยังไม่ได้ตั้ง"
-            if key == ""
-            else "เป็นค่าตัวอย่างที่เผยแพร่อยู่แล้ว"
-            if key in WEAK_SECRET_KEYS
-            else f"สั้นเกินไป ({len(key)} ตัวอักษร)"
+            if value == ""
+            else "เป็นค่าที่เดาได้ทันที"
+            if value in weak
+            else f"สั้นเกินไป ({len(value)} ตัวอักษร)"
         )
         message = (
-            f"PSTACK_SECRET_KEY {reason} — JWT ทั้งระบบเซ็นด้วยคีย์นี้ "
-            f"ถ้าเดาได้ ใครก็ปลอม token เป็น admin ได้ทันที\n"
-            f"ตั้งเป็นค่าสุ่มยาวอย่างน้อย {MIN_SECRET_KEY_LENGTH} ตัวอักษร เช่น:\n"
-            f"  PSTACK_SECRET_KEY={secrets.token_urlsafe(48)}"
+            f"{env_name} {reason} — {why}\n"
+            f"ตั้งเป็นค่าสุ่มยาวอย่างน้อย {min_length} ตัวอักษร เช่น:\n"
+            f"  {env_name}={secrets.token_urlsafe(max(min_length, 24))}"
         )
         if self.debug:
-            # dev/เทส: เตือนแต่ยังรันต่อได้ จะได้ไม่ขวางการลองเล่น
             logger.warning("%s", message)
-            return self
+            return
         raise ValueError(message)
+
+    @model_validator(mode="after")
+    def _validate_credentials(self) -> "Settings":
+        self._reject_weak(
+            self.secret_key,
+            "PSTACK_SECRET_KEY",
+            WEAK_SECRET_KEYS,
+            MIN_SECRET_KEY_LENGTH,
+            "JWT ทั้งระบบเซ็นด้วยคีย์นี้ ถ้าเดาได้ ใครก็ปลอม token เป็น admin ได้ทันที",
+        )
+        self._reject_weak(
+            self.admin_password,
+            "PSTACK_ADMIN_PASSWORD",
+            WEAK_ADMIN_PASSWORDS,
+            MIN_ADMIN_PASSWORD_LENGTH,
+            "ใช้สร้างบัญชี superuser คนแรก ถ้าเดาได้ก็เข้าระบบได้เลยโดยไม่ต้องหาช่องโหว่อะไร",
+        )
+        return self
 
     @property
     def docs_enabled(self) -> bool:

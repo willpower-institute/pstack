@@ -8,7 +8,7 @@
    รันไฟล์เดียวผ่าน รันทั้งชุดแดง)
 
 2. pydantic-settings อ่าน `.env` ของเครื่อง dev ด้วย — ค่าที่เทสพึ่งพาต้องปักหมุดไว้ที่นี่
-   ไม่งั้นแค่ dev เปลี่ยน PSTACK_ADMIN_PASSWORD ใน .env เทสที่ล็อกอินด้วย admin/admin
+   ไม่งั้นแค่ dev เปลี่ยน PSTACK_ADMIN_PASSWORD ใน .env เทสที่ล็อกอินด้วยรหัส admin
    ก็แดงทั้งชุดโดยที่โค้ดไม่ได้ผิดอะไร
 
 โมดูลใหม่ที่อยากให้เทสครอบ ให้เพิ่มชื่อใน PSTACK_MODULES ด้านล่างที่เดียว
@@ -29,7 +29,7 @@ os.environ["PSTACK_ADDONS_PATHS"] = "addons,tests/ext_addons"  # ทดสอบ
 os.environ["PSTACK_STORAGE_DIR"] = "./test_uploads"
 os.environ["PSTACK_LINE_SYNC_MODE"] = "true"  # ประมวลผล webhook แบบ sync ในเทส
 os.environ["PSTACK_ADMIN_EMAIL"] = "admin@example.com"
-os.environ["PSTACK_ADMIN_PASSWORD"] = "admin"
+os.environ["PSTACK_ADMIN_PASSWORD"] = "test-admin-pw-9f3k2x"  # ต้องผ่านกติกาความแข็งแรงของ config
 # ปิด rate limit ในชุดเทสหลัก (เทสหลายตัวล็อกอินซ้ำ ๆ ด้วยบัญชีเดียวกัน)
 # ตัว rate limit เองมีเทสแยกที่ tests/test_login_rate_limit.py
 os.environ["PSTACK_LOGIN_RATE_LIMIT_PER_IP"] = "0"

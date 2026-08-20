@@ -10,6 +10,23 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 | pstack-vdo | v0.1.0 |
 | care-agent-platform | v0.3.1 |
 
+## Unreleased
+
+> ⚠️ **BREAKING (operator):** **ต้องตั้ง `PSTACK_ADMIN_PASSWORD`** เป็นค่ายาว ≥12 ตัว
+> และไม่ใช่ค่าที่เดาได้ ไม่งั้น **ระบบไม่บูต** — กติกาเดียวกับ `PSTACK_SECRET_KEY` ใน v0.4.0
+> · ลำดับการอัปเกรด: แก้ `.env` ให้ผ่านก่อน (ปลดล็อกการบูต) แล้วค่อยรัน
+> `python cli.py set-password <email>` เพื่อเปลี่ยนรหัสจริงในฐานข้อมูล
+
+- **บังคับความแข็งแรงของ `PSTACK_ADMIN_PASSWORD`** — เดิมมี default เป็น `"admin"`
+  และมีแค่ warning ตอน install · รวม logic กับ `PSTACK_SECRET_KEY` ไว้ที่ `_reject_weak()`
+- **`python cli.py set-password <email>`** (ใหม่) — เดิม**ไม่มีทางเปลี่ยนรหัสผ่านเลย**
+  ทั้ง endpoint และ CLI · `PSTACK_ADMIN_PASSWORD` ใช้แค่ตอนสร้าง admin ครั้งแรก
+  แก้ค่าใน `.env` ทีหลังจึงไม่มีผลกับรหัสจริง — ถ้าไม่มีคำสั่งนี้ การบังคับข้างบน
+  จะกลายเป็นแค่ความรู้สึกปลอดภัยผิด ๆ
+- **ตรวจรหัส admin ที่อยู่ใน DB จริงตอน upgrade** — deployment ที่ติดตั้งไว้ก่อนหน้านี้
+  อาจยังใช้ `admin/admin` อยู่แม้ `.env` จะถูกแก้ไปแล้ว · `users` on_upgrade เทียบ hash
+  ที่เก็บไว้กับรายการรหัสที่เดาได้ แล้ว log error พร้อมคำสั่งที่ใช้แก้ · **`users` → v1.1.0**
+
 ## v0.4.0 — 2026-08-20
 
 Security hardening review ทั้ง framework + ปิด follow-up ของ v0.3.2 (8 PR: #19–#26)
