@@ -44,11 +44,37 @@ async def lifespan(app: FastAPI):
     await dispose_engine()
 
 
+# header ที่ปลอดภัยกับทุกหน้าโดยไม่ต้องตั้งค่าอะไรเพิ่ม
+# (CSP กับ HSTS ไม่ใส่ให้ที่นี่ — CSP ต้องปรับตามเนื้อหาของแต่ละ deployment
+#  ส่วน HSTS ควรตั้งที่ reverse proxy ที่รู้ว่ากำลังเสิร์ฟผ่าน https จริง)
+SECURITY_HEADERS = {
+    # กันเบราว์เซอร์เดา content-type เอง — สำคัญกับไฟล์ที่ผู้ใช้อัปโหลดมา
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, lifespan=lifespan, debug=settings.debug)
+    docs_on = settings.docs_enabled
+    app = FastAPI(
+        title=settings.app_name,
+        lifespan=lifespan,
+        debug=settings.debug,
+        docs_url="/docs" if docs_on else None,
+        redoc_url="/redoc" if docs_on else None,
+        openapi_url="/openapi.json" if docs_on else None,
+    )
     ctx.app = app
     ctx.settings = settings
+
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
 
     ctx.modules = discover(settings.addons_paths_list)
     order = resolve_order(settings.modules_list, ctx.modules)

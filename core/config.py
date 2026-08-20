@@ -18,8 +18,16 @@ class Settings(BaseSettings):
     addons_paths: str = "addons"
 
     access_token_expire_minutes: int = 60 * 24
+
+    # เปิด /docs /redoc /openapi.json หรือไม่ — None = ตามค่า debug
+    # (เปิดสาธารณะ = เปิดเผยผังทุก endpoint ทุก schema ให้คนนอกอ่าน)
+    expose_docs: bool | None = None
     admin_email: str = "admin@example.com"
     admin_password: str = "admin"
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.debug if self.expose_docs is None else self.expose_docs
 
     @property
     def modules_list(self) -> list[str]:
