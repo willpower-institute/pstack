@@ -17,6 +17,7 @@ from typing import Any
 from addons.ai_agent.config import get_ai_settings
 from core.ai.tools import ToolDef
 from core.db import get_sessionmaker
+from core.tenancy import bind_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,15 @@ class AgentRuntime:
             )
         return self.client.messages.stream(**kwargs)
 
-    async def _run_tool(self, tool: ToolDef, tool_input: dict) -> tuple[str, bool]:
+    async def _run_tool(
+        self, tool: ToolDef, tool_input: dict, tenant_id: str | None = None
+    ) -> tuple[str, bool]:
         try:
             async with get_sessionmaker()() as db:
+                if tenant_id:
+                    # session ผูก tenant ไว้ตอนสร้าง — bind ให้ RLS กรองที่ชั้น DB
+                    # และให้ tool อ่านผ่าน core.tenancy.bound_tenant() ได้
+                    await bind_tenant(db, tenant_id)
                 result = await tool.fn(db, **tool_input)
             return str(result), False
         except Exception as e:
@@ -84,6 +91,7 @@ class AgentRuntime:
         tools: list[ToolDef],
         system: str,
         save,  # async fn(role, content_blocks, text) -> เก็บลง DB
+        tenant_id: str | None = None,  # tenant ที่ผูกกับ agent session นี้
     ) -> AsyncIterator[dict]:
         """yield event dicts: text / tool_use / tool_result / done / error"""
         tool_map = {t.name: t for t in tools}
@@ -131,7 +139,9 @@ class AgentRuntime:
                 if tool is None:
                     output, is_error = f"unknown tool: {name}", True
                 else:
-                    output, is_error = await self._run_tool(tool, block.get("input") or {})
+                    output, is_error = await self._run_tool(
+                        tool, block.get("input") or {}, tenant_id
+                    )
                 yield {"type": "tool_result", "name": name, "ok": not is_error}
                 results.append(
                     {
@@ -157,7 +167,7 @@ def get_runtime() -> AgentRuntime:
     return _runtime
 
 
-def build_system_prompt(user, tools: list[ToolDef]) -> str:
+def build_system_prompt(user, tools: list[ToolDef], tenant_id: str | None = None) -> str:
     settings = get_ai_settings()
     module_list = sorted({t.module for t in tools})
     parts = [
@@ -167,6 +177,12 @@ def build_system_prompt(user, tools: list[ToolDef]) -> str:
         "ถ้าไม่มี tool ที่ตอบได้ ให้บอกตรงๆ ว่าข้อมูลส่วนนั้นเข้าถึงไม่ได้",
         f"โมดูลที่มี tools ให้ใช้: {', '.join(module_list) or '(ไม่มี)'}",
     ]
+    if tenant_id:
+        parts.append(
+            f"บทสนทนานี้ทำงานในบริบทของ tenant: {tenant_id} — "
+            "ข้อมูลที่ tool คืนมาจะเป็นของ tenant นี้เท่านั้น "
+            "ถ้าผู้ใช้ถามถึง tenant อื่น ให้บอกว่าต้องเปิดแชทใหม่ในบริบทของ tenant นั้น"
+        )
     if settings.system_extra:
         parts.append(settings.system_extra)
     return "\n\n".join(parts)

@@ -7,8 +7,35 @@ from core.ai import get_tools
 from core.ai.tools import ToolDef
 
 
-async def create_session(session: AsyncSession, user_id: int, title: str = "") -> AgentSession:
-    record = AgentSession(user_id=user_id, title=title)
+class TenantNotAllowed(Exception):
+    """user เข้าถึง tenant ที่ขอไม่ได้ — หรือระบบไม่ได้เปิดโมดูล tenancy ไว้"""
+
+
+async def authorize_tenant(session: AsyncSession, user, tenant_id: str) -> None:
+    """ตรวจว่า user เข้าถึง tenant นี้ได้จริง — fail closed เสมอ
+
+    วางไว้ที่ ai_agent เพราะทั้ง agent ภายในและ mcp_server (ซึ่ง depends ai_agent อยู่แล้ว)
+    ใช้ร่วมกัน · ไม่ import addons.tenancy ที่ระดับ module เพื่อให้ deployment ที่ไม่ได้
+    เปิด tenancy ยัง import โมดูลนี้ได้ตามปกติ
+    """
+    if getattr(user, "is_superuser", False):
+        return
+
+    from core.runtime import ctx
+
+    if not any(m.name == "tenancy" for m in ctx.load_order):
+        raise TenantNotAllowed("ระบบนี้ไม่ได้เปิดโมดูล tenancy — ระบุ tenant ไม่ได้")
+
+    from addons.tenancy.services import is_member
+
+    if not await is_member(session, tenant_id, user.id):
+        raise TenantNotAllowed(f"ไม่มีสิทธิ์ใน tenant: {tenant_id}")
+
+
+async def create_session(
+    session: AsyncSession, user_id: int, title: str = "", tenant_id: str | None = None
+) -> AgentSession:
+    record = AgentSession(user_id=user_id, title=title, tenant_id=tenant_id)
     session.add(record)
     await session.commit()
     await session.refresh(record)
