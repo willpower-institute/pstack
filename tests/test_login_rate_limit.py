@@ -50,7 +50,7 @@ def test_failed_logins_get_blocked_after_limit(client, limits):
 def test_successful_login_is_not_counted(client, limits):
     """ผู้ใช้จริงที่ล็อกอินถูกต้องซ้ำ ๆ ต้องไม่โดนกวน — นับเฉพาะครั้งที่ล้มเหลว"""
     for _ in range(6):
-        r = _login(client, password="admin")
+        r = _login(client, password="test-admin-pw-9f3k2x")
         assert r.status_code == 200, r.text
 
 
