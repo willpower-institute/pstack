@@ -975,3 +975,82 @@ def test_agent_runtime_binds_tenant_before_calling_tool(monkeypatch):
     bound.clear()
     asyncio.run(runtime._run_tool(tool, {}, None))
     assert bound == []
+
+
+def test_storage_never_slurps_whole_file_into_memory(client, monkeypatch):
+    """ห้ามอ่านทั้งไฟล์เข้า RAM ก่อนเช็คขนาด
+
+    ของเดิมทำ `data = await upload.read()` แล้วค่อยเทียบขนาด — ไฟล์ 600MB
+    ทำ RSS ของ server พุ่งจาก 99MB เป็น 697MB ทั้งที่สุดท้ายตอบ 413
+    (ผู้ใช้ที่ล็อกอินได้คนไหนก็ทำให้ container OOM ได้ และ endpoint นี้ไม่ต้องมี permission)
+
+    เทสนี้จับที่พฤติกรรม: read() ต้องไม่เคยถูกเรียกแบบไม่ระบุขนาด chunk
+    """
+    from starlette.datastructures import UploadFile
+
+    calls: list[tuple] = []
+    original_read = UploadFile.read
+
+    async def spy_read(self, size: int = -1):
+        calls.append((size,))
+        return await original_read(self, size)
+
+    monkeypatch.setattr(UploadFile, "read", spy_read)
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("chunked.bin", b"y" * (2 * 1024 * 1024), "application/octet-stream")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    assert calls, "ไม่ได้เรียก read() เลย?"
+    assert all(size > 0 for (size,) in calls), (
+        f"มีการอ่านทั้งไฟล์รวดเดียว (read({calls}) ) — ต้องอ่านเป็น chunk เท่านั้น"
+    )
+
+
+def test_storage_rejects_oversized_without_leaving_junk(client, monkeypatch):
+    """ไฟล์เกินขนาดต้องถูกปฏิเสธ และต้องไม่ทิ้งไฟล์ค้างไว้บนดิสก์
+
+    ของเดิมอ่านทั้งไฟล์เข้า RAM ก่อนค่อยเช็คขนาด — ไฟล์ใหญ่ทำ RSS พุ่งตามขนาดไฟล์
+    ทั้งที่สุดท้ายตอบ 413 (ผู้ใช้ที่ล็อกอินได้คนไหนก็ทำ OOM ให้ server ได้)
+    """
+    from addons.storage import services as storage_services
+
+    settings = storage_services.get_storage_settings()
+    monkeypatch.setattr(settings, "max_size_mb", 1, raising=False)
+
+    before = set(storage_services.storage_dir().iterdir())
+
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("big.bin", b"\0" * (3 * 1024 * 1024), "application/octet-stream")},
+        headers=headers,
+    )
+    assert r.status_code == 413, r.text
+
+    after = set(storage_services.storage_dir().iterdir())
+    assert after == before, "ปฏิเสธแล้วแต่ยังทิ้งไฟล์ค้างไว้บนดิสก์"
+
+
+def test_storage_records_real_size(client):
+    """ขนาดที่บันทึกต้องมาจากไบต์ที่เขียนจริง ไม่ใช่ค่าที่ client บอก"""
+    token = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": "admin"}
+    ).json()["access_token"]
+    payload = b"x" * 5000
+    r = client.post(
+        "/api/storage/upload",
+        files={"file": ("size.bin", payload, "application/octet-stream")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["size"] == len(payload)
