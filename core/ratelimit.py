@@ -29,6 +29,37 @@ _redis_ready: bool | None = None  # None = ยังไม่ได้ลอง�
 _warned_fallback = False
 
 
+_proxy_misconfig_warned = False
+
+
+def client_ip(request) -> str:
+    """IP ของผู้เรียกจริง — พร้อมเตือนครั้งเดียวถ้าอยู่หลัง proxy ที่ยังไม่ได้ตั้งค่า
+
+    uvicorn เขียน `request.client` ใหม่จาก X-Forwarded-For ให้เอง **เฉพาะเมื่อ**
+    peer ที่ต่อเข้ามาอยู่ใน `FORWARDED_ALLOW_IPS` (ค่าเริ่มต้น 127.0.0.1)
+    deploy ใน Docker หลัง Caddy = peer เป็น IP ของ container ซึ่งไม่ตรงกับค่าเริ่มต้น
+    → ทุก request จะกลายเป็น IP เดียวกันหมด และลิมิต "ต่อ IP" จะกลายเป็นลิมิตรวมทั้งระบบ
+    (ผู้ใช้จริงคนที่ 21 ในหนึ่งนาทีจะโดน 429 ทั้งที่ใส่รหัสถูก)
+
+    ตรวจจับ: ถ้ามี header X-Forwarded-For แต่ IP ที่เห็นไม่ได้อยู่ในนั้น
+    แปลว่า uvicorn ไม่ได้เชื่อ proxy ตัวนี้
+    """
+    global _proxy_misconfig_warned
+    ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded and not _proxy_misconfig_warned:
+        chain = {part.strip() for part in forwarded.split(",") if part.strip()}
+        if ip not in chain:
+            _proxy_misconfig_warned = True
+            logger.warning(
+                "ได้รับ X-Forwarded-For (%s) แต่เห็น client เป็น %s — uvicorn ไม่ได้เชื่อ proxy ตัวนี้ "
+                "ตั้ง FORWARDED_ALLOW_IPS ให้เป็น IP ของ reverse proxy ไม่งั้นลิมิตต่อ IP "
+                "จะกลายเป็นลิมิตรวมของทั้งระบบ (หรือตั้ง PSTACK_LOGIN_RATE_LIMIT_PER_IP=0 ถ้าตั้งใจ)",
+                forwarded, ip,
+            )
+    return ip
+
+
 class RateLimited(Exception):
     def __init__(self, retry_after: int) -> None:
         super().__init__(f"เกินโควตา ลองใหม่ใน {retry_after} วินาที")
@@ -119,7 +150,8 @@ async def check_rate_limit(
 
 async def reset() -> None:
     """ล้างสถานะ — สำหรับเทสเท่านั้น"""
-    global _redis, _redis_ready, _warned_fallback
+    global _redis, _redis_ready, _warned_fallback, _proxy_misconfig_warned
+    _proxy_misconfig_warned = False
     _memory.counts.clear()
     if _redis is not None:
         try:
