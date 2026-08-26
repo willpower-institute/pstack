@@ -1,0 +1,36 @@
+# CodeQL — วิเคราะห์โค้ดหาช่องโหว่ (SQL injection, path traversal, hardcoded secret ฯลฯ)
+# ฟรีสำหรับ public repo · private repo ต้องมี GitHub Advanced Security
+#
+# ตั้งใจแยกออกจาก workflow CI และ **ไม่ได้อยู่ใน gate 'ci'**
+# เพราะใช้เวลานานกว่าและรันตามตารางด้วย — ไม่ควรบล็อกทุก PR
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # ทุกวันจันทร์ 03:00 UTC — จับช่องโหว่ที่ query ใหม่ของ CodeQL เพิ่งรู้จัก
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write   # ต้องมีเพื่อส่งผลขึ้นแท็บ Security
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          queries: security-and-quality
+
+      - uses: github/codeql-action/analyze@v4
