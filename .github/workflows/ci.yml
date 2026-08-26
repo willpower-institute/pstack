@@ -30,11 +30,33 @@ jobs:
       - name: Test
         run: pytest tests/ -q
 
+      # ตรวจ CVE ที่ประกาศแล้วใน dependency ที่ติดตั้งจริง
+      # --skip-editable ข้ามตัว pstack เอง (ไม่ได้อยู่บน PyPI)
+      # ถ้าเจอช่องโหว่ที่ยังไม่มี fix ให้ระบุ --ignore-vuln GHSA-xxxx พร้อมคอมเมนต์ว่าทำไม
+      - name: pip-audit (CVE ใน dependency)
+        run: |
+          pip install pip-audit
+          pip-audit --skip-editable
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # gitleaks ต้องเห็นทั้ง history ไม่ใช่แค่ commit ล่าสุด
+
+      # ใช้ CLI ผ่าน docker ไม่ใช่ gitleaks-action — action ต้องมี license สำหรับ org
+      # --redact สำคัญมาก: ไม่งั้น secret ที่เจอจะถูกพิมพ์ลง log ของ Actions
+      - name: gitleaks (ทั้ง git history)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            git /repo --no-banner --redact --exit-code 1
+
   # gate: required status check ตัวเดียวของ repo นี้คือ "ci"
   # เพิ่ม job ใหม่เมื่อไหร่ ใส่ชื่อใน needs ด้วย — branch protection ไม่ต้องแก้ตาม
   ci:
     if: always()
-    needs: [test]
+    needs: [test, secrets]
     runs-on: ubuntu-latest
     steps:
       - name: Gate
