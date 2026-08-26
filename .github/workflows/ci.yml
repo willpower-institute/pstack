@@ -5,12 +5,21 @@ on:
     branches: [main]
   pull_request:
 
+# ให้สิทธิ์น้อยที่สุด — job ไหนต้องการมากกว่านี้ค่อยประกาศเพิ่มเฉพาะ job นั้น
+permissions:
+  contents: read
+
+# push รัว ๆ บน branch เดียวกัน ให้ยกเลิกรอบเก่าทิ้ง ไม่ต้องวิ่งซ้อนกัน
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -20,3 +29,18 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest tests/ -q
+
+  # gate: required status check ตัวเดียวของ repo นี้คือ "ci"
+  # เพิ่ม job ใหม่เมื่อไหร่ ใส่ชื่อใน needs ด้วย — branch protection ไม่ต้องแก้ตาม
+  ci:
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate
+        run: |
+          if ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}; then
+            echo "::error::มี job ก่อนหน้าไม่ผ่าน — ดูรายละเอียดที่ job ที่แดง"
+            exit 1
+          fi
+          echo "ผ่านทั้งหมด"
