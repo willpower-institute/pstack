@@ -17,6 +17,17 @@ kernel ปัจจุบัน: **v0.4.1** · ตารางนี้คือ
 | pstack-vdo | v0.1.0 | ตามหลังมาก (ก่อนงาน multi-tenancy ทั้งหมด) |
 | pstack-vituntasa | v0.1.0 | ตามหลังมาก · ทดสอบผ่านบน v0.3.1 แล้ว ยังไม่ bump |
 
+## v0.5.1 — 2026-09-06
+
+ปิด Phase 5 — tenant-aware CLI + **module CLI extension point** · **ไม่มี breaking change**
+
+- **module CLI extension point:** โมดูลที่มีไฟล์ `cli.py` + ตัวแปร `cli` (Typer) จะถูก mount
+  เป็น command group ชื่อโมดูลอัตโนมัติ (เฉพาะโมดูลที่เปิดใน `PSTACK_MODULES`) · keep core เล็ก —
+  คำสั่งเฉพาะโมดูลอยู่ในโมดูลนั้น ไม่ปนใน core · import ล้มก็ข้าม (โมดูลหนึ่งพังไม่ทำ CLI ทั้งตัวพัง)
+- **`python cli.py tenancy ...`** (ใน `addons/tenancy/cli.py`) — `list` / `create <id> [--name] [--timezone]` /
+  `add-member <id> <อีเมล|user_id> [--role]` / `members <id>` · ระบุผู้ใช้ด้วยอีเมลหรือ id ก็ได้ ·
+  error ชัด + exit 1 (id ผิดรูปแบบ / ซ้ำ / ไม่พบ tenant|user) · เติมเต็ม Phase 5 (คู่กับ Admin UI ที่ v0.5.0)
+
 ## v0.5.0 — 2026-09-06
 
 โมดูล `admin` — Admin UI (Phase 5) · **ไม่มี breaking change** (โมดูล opt-in ใหม่ล้วน ๆ · app เดิมไม่กระทบ)
