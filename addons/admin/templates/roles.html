@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% block title %}บทบาท{% endblock %}
+{% block heading %}บทบาท (Role) และสิทธิ์{% endblock %}
+{% block content %}
+<div class="card">
+  <form method="post" action="/admin/roles" class="row">
+    <div><label>ชื่อบทบาท</label><input name="name" type="text" required></div>
+    <div style="flex:2"><label>สิทธิ์ (คั่นด้วยเว้นวรรค/คอมมา)</label>
+      <input name="permissions" type="text" placeholder="users.read users.write admin.access"></div>
+    <div style="flex:0"><button type="submit">สร้างบทบาท</button></div>
+  </form>
+  {% if known_permissions %}
+  <p class="muted" style="margin:.6rem 0 0">สิทธิ์ที่โมดูลประกาศไว้:
+    {% for p in known_permissions %}<span class="pill">{{ p }}</span>{% endfor %}</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>ชื่อ</th><th>สิทธิ์</th><th></th></tr></thead>
+    <tbody>
+      {% for r in roles %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>{% for p in r.permissions %}<span class="pill">{{ p }}</span>
+            {% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td>
+          <form method="post" action="/admin/roles/{{ r.id }}/delete"
+                onsubmit="return confirm('ลบบทบาท {{ r.name }}?')">
+            <button class="ghost" type="submit">ลบ</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">ยังไม่มีบทบาทในระบบ</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

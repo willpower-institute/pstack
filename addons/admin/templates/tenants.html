@@ -1,0 +1,46 @@
+{% extends "admin/base.html" %}
+{% block title %}Tenant{% endblock %}
+{% block heading %}Tenant / Workspace / สมาชิก{% endblock %}
+{% block content %}
+{% if not tenancy_on %}
+<div class="card muted">
+  ยังไม่ได้เปิดโมดูล <code>tenancy</code> — เพิ่ม <code>tenancy</code> ใน <code>PSTACK_MODULES</code>
+  แล้วบูตใหม่เพื่อจัดการ multi-tenant
+</div>
+{% else %}
+<div class="card">
+  <form method="post" action="/admin/tenants" class="row">
+    <div><label>tenant_id (a-z 0-9 _ -)</label><input name="tenant_id" type="text" required></div>
+    <div><label>ชื่อแสดง</label><input name="display_name" type="text"></div>
+    <div style="flex:0"><button type="submit">สร้าง tenant</button></div>
+  </form>
+</div>
+
+{% for row in tenants %}
+<div class="card">
+  <h3 style="margin:.1rem 0 .6rem">{{ row.tenant.tenant_id }}
+    <span class="muted" style="font-weight:400">{{ row.tenant.display_name }}</span></h3>
+  <table>
+    <thead><tr><th>สมาชิก (user_id)</th><th>บทบาทใน tenant</th></tr></thead>
+    <tbody>
+      {% for m in row.members %}
+      <tr><td>{{ m.user_id }}</td><td>{{ m.role }}</td></tr>
+      {% else %}<tr><td colspan="2" class="muted">ยังไม่มีสมาชิก</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/tenants/{{ row.tenant.tenant_id }}/members" class="row"
+        style="margin-top:.7rem">
+    <div><label>user_id</label><input name="user_id" type="number" required></div>
+    <div><label>บทบาท</label><input name="role" type="text" value="member"></div>
+    <div style="flex:0"><button class="ghost" type="submit">เพิ่มสมาชิก</button></div>
+  </form>
+  {% if row.workspaces %}
+  <p class="muted" style="margin:.6rem 0 0">Workspace:
+    {% for w in row.workspaces %}<span class="pill">{{ w.workspace_id }}</span>{% endfor %}</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="card muted">ยังไม่มี tenant — สร้างด้านบนได้เลย</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

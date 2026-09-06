@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin{% endblock %} · pstack</title>
+  <style>
+    :root { --accent:#1a7f5a; --bg:#f4f5f4; --card:#fff; --ink:#222b27; --line:#e3e6e3;
+            --muted:#6b746f; --danger:#b3261e; --ok:#1a7f5a; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;
+         background:var(--bg);color:var(--ink);font-size:15px}
+    header{background:var(--card);border-bottom:1px solid var(--line);padding:.6rem 1rem;
+           display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+    header .brand{font-weight:700;color:var(--accent)}
+    nav{display:flex;gap:.25rem;flex-wrap:wrap}
+    nav a{padding:.35rem .7rem;border-radius:7px;text-decoration:none;color:var(--ink)}
+    nav a:hover{background:var(--bg)}
+    nav a.on{background:var(--accent);color:#fff}
+    header .spacer{flex:1}
+    header .who{color:var(--muted);font-size:.85rem}
+    .wrap{max-width:960px;margin:0 auto;padding:1.5rem 1rem 4rem}
+    h1{font-size:1.35rem;margin:0 0 1rem}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+          padding:1rem 1.1rem;margin-bottom:1rem}
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+    th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+    label{display:block;font-size:.82rem;color:var(--muted);margin:.4rem 0 .15rem}
+    input[type=text],input[type=email],input[type=password],input[type=number],textarea,select{
+      width:100%;padding:.45rem .55rem;border:1px solid var(--line);border-radius:7px;
+      font:inherit;background:#fff}
+    textarea{min-height:3.2rem;resize:vertical}
+    button{font:inherit;padding:.45rem .9rem;border:0;border-radius:7px;background:var(--accent);
+           color:#fff;cursor:pointer}
+    button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+    button.link{background:transparent;color:var(--accent);padding:.2rem .4rem}
+    .row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end}
+    .row > div{flex:1;min-width:150px}
+    .flash{padding:.6rem .9rem;border-radius:8px;margin-bottom:1rem}
+    .flash.ok{background:#e6f4ee;color:var(--ok);border:1px solid #bfe3d3}
+    .flash.err{background:#fbeae9;color:var(--danger);border:1px solid #f2c9c6}
+    .muted{color:var(--muted)}
+    .pill{display:inline-block;padding:.1rem .5rem;border-radius:999px;background:var(--bg);
+          border:1px solid var(--line);font-size:.78rem;margin:.1rem .15rem .1rem 0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem}
+    .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem}
+    .stat b{display:block;font-size:1.8rem;color:var(--accent)}
+    code{background:var(--bg);padding:.1rem .35rem;border-radius:5px}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">⚙ pstack admin</span>
+    <nav>
+      <a href="/admin" class="{% if active=='home' %}on{% endif %}">แดชบอร์ด</a>
+      <a href="/admin/users" class="{% if active=='users' %}on{% endif %}">ผู้ใช้</a>
+      <a href="/admin/roles" class="{% if active=='roles' %}on{% endif %}">บทบาท</a>
+      <a href="/admin/tenants" class="{% if active=='tenants' %}on{% endif %}">Tenant</a>
+      <a href="/admin/modules" class="{% if active=='modules' %}on{% endif %}">โมดูล</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="who">{{ admin.email }}</span>
+    <form method="post" action="/admin/logout" style="margin:0">
+      <button class="ghost" type="submit">ออก</button>
+    </form>
+  </header>
+  <div class="wrap">
+    {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    <h1>{% block heading %}{% endblock %}</h1>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

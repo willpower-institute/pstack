@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block title %}โมดูล{% endblock %}
+{% block heading %}โมดูล{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="muted" style="margin:.1rem 0 .8rem">
+    โมดูลเป็น declarative — เปิด/ปิดผ่าน <code>PSTACK_MODULES</code> ใน <code>.env</code> แล้วบูตใหม่
+    (หน้านี้อ่านอย่างเดียว)
+  </p>
+  <table>
+    <thead><tr><th>โมดูล</th><th>เวอร์ชัน (manifest)</th><th>ติดตั้งใน DB</th>
+      <th>depends</th><th>สิทธิ์</th></tr></thead>
+    <tbody>
+      {% for m in modules %}
+      <tr>
+        <td><b>{{ m.name }}</b></td>
+        <td>{{ m.version }}</td>
+        <td>
+          {% if m.installed is none %}<span class="muted">ยังไม่ติดตั้ง</span>
+          {% elif m.installed != m.version %}
+            {{ m.installed }} <span class="pill">รอ upgrade → {{ m.version }}</span>
+          {% else %}{{ m.installed }}{% endif %}
+        </td>
+        <td>{% for d in m.depends %}<span class="pill">{{ d }}</span>{% else %}—{% endfor %}</td>
+        <td>{% for p in m.permissions %}<span class="pill">{{ p }}</span>{% else %}—{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

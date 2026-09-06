@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block title %}แดชบอร์ด{% endblock %}
+{% block heading %}แดชบอร์ด{% endblock %}
+{% block content %}
+<div class="grid">
+  <a class="stat" href="/admin/users" style="text-decoration:none;color:inherit">
+    <b>{{ user_count }}</b> ผู้ใช้
+  </a>
+  <a class="stat" href="/admin/roles" style="text-decoration:none;color:inherit">
+    <b>{{ role_count }}</b> บทบาท
+  </a>
+  <a class="stat" href="/admin/tenants" style="text-decoration:none;color:inherit">
+    <b>{% if tenant_count is none %}—{% else %}{{ tenant_count }}{% endif %}</b>
+    tenant {% if tenant_count is none %}<span class="muted">(ปิดอยู่)</span>{% endif %}
+  </a>
+  <a class="stat" href="/admin/modules" style="text-decoration:none;color:inherit">
+    <b>{{ module_count }}</b> โมดูล
+  </a>
+</div>
+<p class="muted">เลือกเมนูด้านบนเพื่อจัดการแต่ละส่วน</p>
+{% endblock %}

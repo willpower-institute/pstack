@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}ผู้ใช้{% endblock %}
+{% block heading %}ผู้ใช้{% endblock %}
+{% block content %}
+<div class="card">
+  <form method="post" action="/admin/users" class="row">
+    <div><label>อีเมล</label><input name="email" type="email" required></div>
+    <div><label>ชื่อ</label><input name="full_name" type="text"></div>
+    <div><label>รหัสผ่าน (≥8)</label><input name="password" type="password" required></div>
+    <div style="flex:0"><button type="submit">เพิ่มผู้ใช้</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>#</th><th>อีเมล / ชื่อ</th><th>สถานะ</th><th>บทบาท</th><th></th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.email }}{% if u.is_superuser %} <span class="pill">superuser</span>{% endif %}
+            {% if u.full_name %}<div class="muted">{{ u.full_name }}</div>{% endif %}</td>
+        <td>{% if u.is_active %}เปิด{% else %}<span class="muted">ปิด</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/roles">
+            {% for r in roles %}
+            <label style="display:inline-flex;gap:.25rem;align-items:center;margin:0 .5rem .2rem 0">
+              <input type="checkbox" name="role_ids" value="{{ r.id }}"
+                     {% if r in u.roles %}checked{% endif %}> {{ r.name }}
+            </label>
+            {% else %}<span class="muted">ยังไม่มีบทบาท</span>{% endfor %}
+            {% if roles %}<button class="link" type="submit">บันทึกบทบาท</button>{% endif %}
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/toggle">
+            <button class="ghost" type="submit">{% if u.is_active %}ปิด{% else %}เปิด{% endif %}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
