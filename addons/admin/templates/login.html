@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เข้าสู่ระบบผู้ดูแล · pstack</title>
+  <style>
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+         font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;background:#f4f5f4;color:#222b27}
+    .box{background:#fff;border:1px solid #e3e6e3;border-radius:12px;padding:2rem;width:340px;
+         box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    h1{font-size:1.2rem;margin:0 0 1.2rem;color:#1a7f5a}
+    label{display:block;font-size:.82rem;color:#6b746f;margin:.7rem 0 .2rem}
+    input{width:100%;padding:.55rem;border:1px solid #e3e6e3;border-radius:7px;font:inherit}
+    button{width:100%;margin-top:1.2rem;padding:.6rem;border:0;border-radius:7px;background:#1a7f5a;
+           color:#fff;font:inherit;cursor:pointer}
+    .err{background:#fbeae9;color:#b3261e;border:1px solid #f2c9c6;padding:.55rem .8rem;
+         border-radius:8px;margin-bottom:1rem;font-size:.9rem}
+  </style>
+</head>
+<body>
+  <form class="box" method="post" action="/admin/login">
+    <h1>⚙ pstack admin</h1>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <label for="email">อีเมล</label>
+    <input id="email" name="email" type="email" autocomplete="username" required autofocus>
+    <label for="password">รหัสผ่าน</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">เข้าสู่ระบบ</button>
+  </form>
+</body>
+</html>

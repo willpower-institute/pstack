@@ -17,6 +17,20 @@ kernel ปัจจุบัน: **v0.4.1** · ตารางนี้คือ
 | pstack-vdo | v0.1.0 | ตามหลังมาก (ก่อนงาน multi-tenancy ทั้งหมด) |
 | pstack-vituntasa | v0.1.0 | ตามหลังมาก · ทดสอบผ่านบน v0.3.1 แล้ว ยังไม่ bump |
 
+## v0.5.0 — 2026-09-06
+
+โมดูล `admin` — Admin UI (Phase 5) · **ไม่มี breaking change** (โมดูล opt-in ใหม่ล้วน ๆ · app เดิมไม่กระทบ)
+
+- **`admin` addon — Admin UI แบบ server-rendered ที่ `/admin`** (เปิดด้วย `PSTACK_MODULES=...,admin`):
+  จัดการ **users/roles** (สร้างผู้ใช้, สร้าง/ลบบทบาท + สิทธิ์, assign role, เปิด/ปิดบัญชี),
+  **tenant/member/workspace** (ถ้าเปิดโมดูล `tenancy`), และดู **สถานะโมดูล** (read-only)
+- **ล็อกอินด้วย cookie session** — เพราะ pstack auth หลักเป็น Bearer-only (เบราว์เซอร์ไม่ส่งตอน navigate) ·
+  เก็บ JWT เดิมของ `core.auth` ใน cookie HttpOnly + SameSite=Lax (กัน CSRF ข้ามไซต์) + Secure เมื่อ
+  request เป็น https (ทำงานหลัง reverse proxy ที่ส่ง `X-Forwarded-Proto`) · **ไม่แตะ core auth**
+- **gate ด้วยสิทธิ์ `admin.access`** (superuser ผ่านเสมอ) · `/admin/login` rate-limit เท่ากับ `/api/auth/login`
+- server-rendered (Jinja autoescape) → กัน XSS โดยธรรมชาติ · PRG pattern · guard: ปิดบัญชีตัวเอง /
+  superuser คนสุดท้ายไม่ได้ · โมดูลเป็น declarative จึงจัดการผ่าน UI ไม่ได้ (read-only)
+
 ## v0.4.1 — 2026-08-20
 
 Security follow-ups ต่อจาก v0.4.0 (2 PR: #28, #29)
