@@ -36,6 +36,11 @@ router = APIRouter(tags=["admin"])
 MIN_USER_PASSWORD_LENGTH = 8
 
 
+def _for_log(value: str) -> str:
+    """ตัด CR/LF ออกก่อนใส่ลง log — กัน log injection (ผู้ใช้ปลอมบรรทัด log ผ่านค่า form)"""
+    return value.replace("\r", " ").replace("\n", " ")[:120]
+
+
 def _back(path: str, *, ok: str | None = None, error: str | None = None) -> RedirectResponse:
     query = urlencode({k: v for k, v in (("ok", ok), ("error", error)) if v})
     url = f"{path}?{query}" if query else path
@@ -78,7 +83,7 @@ async def login_submit(
             acct_key, settings.login_rate_limit_per_account, 300, increment=False
         )
     except RateLimited:
-        logger.warning("admin login ถูกจำกัดอัตรา ip=%s email=%s", ip, email)
+        logger.warning("admin login ถูกจำกัดอัตรา ip=%s email=%s", ip, _for_log(email))
         return render(
             "admin/login.html",
             {"error": "พยายามเข้าสู่ระบบถี่เกินไป ลองใหม่อีกครั้งภายหลัง"},
@@ -86,7 +91,7 @@ async def login_submit(
 
     user = await user_services.authenticate(session, email, password)
     if user is None or not user.is_active or not has_admin_access(user):
-        logger.warning("admin login ล้มเหลว ip=%s email=%s", ip, email)
+        logger.warning("admin login ล้มเหลว ip=%s email=%s", ip, _for_log(email))
         with contextlib.suppress(RateLimited):
             await check_rate_limit(acct_key, settings.login_rate_limit_per_account, 300)
         return render("admin/login.html", {"error": settings_login_fail})
