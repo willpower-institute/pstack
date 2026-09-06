@@ -51,7 +51,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 3 — AI Agent module (agent runtime บน Claude, SSE chat API, RBAC-scoped tools)
 - [x] Phase 4 — `line_oa` (webhook หลาย channel, account linking, agent bridge), module generator
 - [x] Phase 4.5 — DX: โมดูลตัวอย่าง `faq`, หน้าแชท `/agent`, [MODULE_GUIDE](docs/MODULE_GUIDE.md), CI
-- [~] Phase 5 — Multi-tenant: โมดูล `tenancy` (tenant/workspace/membership + `core.tenancy` scope helper + RLS), `core.clock`, `stamp` (v0.3.0) + โมดูล `admin` (Admin UI server-rendered, v0.5.0) · เหลือ tenant-aware CLI
+- [x] Phase 5 — Multi-tenant: โมดูล `tenancy` (tenant/workspace/membership + `core.tenancy` scope helper + RLS), `core.clock`, `stamp` (v0.3.0) + โมดูล `admin` (Admin UI, v0.5.0) + tenant-aware CLI `python cli.py tenancy ...` (v0.5.1)
 
 ## Development
 
@@ -74,6 +74,12 @@ python cli.py modules                  # ดูโมดูลทั้งหม
 python cli.py new-module <name>        # สร้างโครง addon ใหม่
 python cli.py makemigration <module> -m "..."   # สร้าง alembic revision ของโมดูล
 python cli.py migrate                  # apply migrations + install/upgrade ทุกโมดูล
+python cli.py set-password <email>     # เปลี่ยนรหัสผ่านผู้ใช้
+
+# โมดูลลงทะเบียนคำสั่งของตัวเองได้ (มี addons/<name>/cli.py ที่ export `cli: Typer`)
+python cli.py tenancy list             # เช่น โมดูล tenancy: list/create/add-member/members
+python cli.py tenancy create acme --name "Acme Co"
+python cli.py tenancy add-member acme user@example.com --role owner
 ```
 
 Login แรก: `admin@example.com` + รหัสที่ตั้งไว้ใน `PSTACK_ADMIN_PASSWORD`

@@ -297,5 +297,40 @@ def new_module(name: str, addons_path: str = "addons") -> None:
     typer.echo(f"เพิ่ม '{name}' เข้า PSTACK_MODULES ใน .env เพื่อเปิดใช้งาน")
 
 
+def _mount_module_clis() -> None:
+    """extension point: โมดูลที่มีไฟล์ `cli.py` + ตัวแปร `cli` (Typer) จะถูก mount เป็น
+    command group ชื่อโมดูล — เฉพาะโมดูลที่เปิดใน PSTACK_MODULES
+
+    เช่น addons/tenancy/cli.py → `python cli.py tenancy ...`
+    keep core เล็ก: คำสั่งเฉพาะโมดูลอยู่ในโมดูลนั้น ไม่ปนใน core · import ล้มก็ข้าม
+    (โมดูลหนึ่งพังไม่ควรทำให้ CLI ทั้งตัวใช้ไม่ได้)
+    """
+    import importlib
+
+    from core.config import get_settings
+    from core.loader import discover, resolve_order
+
+    settings = get_settings()
+    modules = discover(settings.addons_paths_list)
+    try:
+        order = resolve_order(settings.modules_list, modules)
+    except Exception:
+        order = [n for n in settings.modules_list if n in modules]
+    for name in order:
+        info = modules.get(name)
+        if info is None or not (info.path / "cli.py").exists():
+            continue
+        try:
+            mod = importlib.import_module(f"{info.package}.cli")
+        except Exception as e:
+            typer.secho(f"(ข้าม CLI ของโมดูล '{name}': {e})", fg="yellow")
+            continue
+        sub = getattr(mod, "cli", None)
+        if isinstance(sub, typer.Typer):
+            app.add_typer(sub, name=name)
+
+
+_mount_module_clis()
+
 if __name__ == "__main__":
     app()

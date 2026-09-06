@@ -134,6 +134,27 @@ async def care_tick(ctx):
 > ⏰ **cron ตีความด้วยเวลา UTC ของ container** — คำนวณ due time เป็น UTC ไว้ก่อนเสมอ
 > (framework ยึด UTC: `datetime.now(UTC)`) · รัน worker หลาย replica ได้ arq coalesce cron ให้ยิงครั้งเดียว
 
+## 7.5 CLI ของโมดูล (ออปชัน)
+
+โมดูลลงทะเบียนคำสั่ง CLI ของตัวเองได้ — วางไฟล์ `cli.py` ที่ export ตัวแปร `cli` เป็น `typer.Typer`
+แล้ว `cli.py` หลักจะ mount เป็น command group ชื่อโมดูลให้อัตโนมัติ (เฉพาะโมดูลที่เปิดใน `PSTACK_MODULES`)
+
+```python
+# addons/myshop/cli.py
+import typer
+cli = typer.Typer(help="จัดการ myshop")
+
+@cli.command("rebuild")
+def rebuild(shop_id: int) -> None:
+    """เรียก: python cli.py myshop rebuild 1"""
+    from core.app import create_app
+    create_app()  # boot ให้ทุกโมดูล import ก่อนแตะ DB
+    ...
+```
+
+ดูตัวอย่างเต็มที่ `addons/tenancy/cli.py` (`python cli.py tenancy list/create/add-member/members`) —
+import ของ addon อยู่ในตัวคำสั่ง (ให้ mount ตอน CLI boot ราคาถูก) · error ให้ `raise typer.Exit(1)`
+
 ## 8. เทส
 
 เพิ่มโมดูลเข้า `PSTACK_MODULES` ใน `tests/test_smoke.py` แล้วเขียนเทสผ่าน `TestClient` — บูตจริงทั้งระบบบน sqlite (ไม่ต้องมี postgres/redis/API key) ดูตัวอย่างครบทุกแบบใน `tests/test_smoke.py`
