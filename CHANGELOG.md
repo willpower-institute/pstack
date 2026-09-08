@@ -5,7 +5,7 @@ App repos (pstack-vdo, pstack-lms, ...) ควร pin `PSTACK_REF` เป็น 
 
 ## Compatibility
 
-kernel ปัจจุบัน: **v0.4.1** · ตารางนี้คือ `PSTACK_REF` ที่แต่ละ consumer pin อยู่จริง (ณ 2026-09-06)
+kernel ปัจจุบัน: **v0.5.2** (tag ล่าสุด v0.5.1) · ตารางนี้คือ `PSTACK_REF` ที่แต่ละ consumer pin อยู่จริง (ณ 2026-09-08)
 
 > ⚠️ ระหว่าง pin เก่ากับ v0.4.1 มี **breaking (operator) 2 รอบ** ที่ต้องจัดการก่อนบูตตอนไล่ขึ้น:
 > **v0.4.0** บังคับ `PSTACK_SECRET_KEY`, **v0.4.1** บังคับ `PSTACK_ADMIN_PASSWORD` (ไม่ตั้ง = ไม่บูต) ·
@@ -14,8 +14,9 @@ kernel ปัจจุบัน: **v0.4.1** · ตารางนี้คือ
 | App repo | pin จริง (PSTACK_REF) | สถานะเทียบ kernel |
 |---|---|---|
 | care-agent-platform | v0.3.1 | ตามหลัง — ยังไม่ pin v0.4.x (ทีมนี้เป็นคนผลักดัน security fixes เข้า v0.4.x เอง) |
-| pstack-vdo | v0.1.0 | ตามหลังมาก (ก่อนงาน multi-tenancy ทั้งหมด) |
-| pstack-vituntasa | v0.1.0 | ตามหลังมาก · ทดสอบผ่านบน v0.3.1 แล้ว ยังไม่ bump |
+| pstack-vdo | v0.5.1 | ตรงรุ่น · ไม่เปิด `tenancy` (ไม่ต้อง adopt) · test harness ปรับผ่าน gate v0.4.0/v0.4.1 แล้ว |
+| pstack-vituntasa | v0.5.1 | ตรงรุ่น · ไม่เปิด `tenancy` (ไม่ต้อง adopt) · test harness ปรับผ่าน gate v0.4.0/v0.4.1 แล้ว |
+| pstack-app-template | v0.5.1 | ตรงรุ่น · แก้ pin ที่ไม่ตรงกันเอง (v0.2.0 vs v0.1.0) ให้รวมเป็น v0.5.1 |
 
 ## v0.5.2 — 2026-09-08
 
