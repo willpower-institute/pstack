@@ -17,6 +17,20 @@ kernel ปัจจุบัน: **v0.4.1** · ตารางนี้คือ
 | pstack-vdo | v0.1.0 | ตามหลังมาก (ก่อนงาน multi-tenancy ทั้งหมด) |
 | pstack-vituntasa | v0.1.0 | ตามหลังมาก · ทดสอบผ่านบน v0.3.1 แล้ว ยังไม่ bump |
 
+## v0.5.2 — 2026-09-08
+
+Kernel public-surface contract + conformance gate (รองพื้นก่อน Phase 6) · **ไม่มี breaking change**
+(เพิ่ม test + snapshot + doc เท่านั้น · ไม่แตะพฤติกรรม kernel)
+
+- **`contract/kernel-contract.json` + `tests/test_kernel_contract.py`** — ล็อก public surface ทั้งชุด
+  ที่ consumer/addon พึ่งพา (34 symbol ใน 13 โมดูลของ `core`) ด้วย snapshot ของ signature ·
+  kernel เปลี่ยน signature หรือลบ symbol โดยไม่ตั้งใจ → เทสแดงใน gate `ci` **ก่อน**ถึงมือ consumer ·
+  เปลี่ยนโดยตั้งใจ = `PSTACK_UPDATE_CONTRACT=1 pytest tests/test_kernel_contract.py` แล้ว review diff + จดที่นี่
+- ล็อก **รูปร่าง** ของ surface (มี symbol ไหน / ชื่อ param) ไม่ผูก type annotation → เสถียรข้าม Python version ·
+  การล็อก **ค่า** ข้าม repo (เช่น regex ของ `ID_PATTERN` = identity/v1) ยังเป็นของ
+  `test_tenancy.py::test_id_pattern_is_identity_v1_contract` (เสริม ไม่ทดแทน) · ดู [docs/KERNEL_CONTRACT.md](docs/KERNEL_CONTRACT.md)
+- ไม่เพิ่ม dependency (JSON stdlib) · ไม่ต้องแก้ CI workflow (เทสอยู่ใน `pytest tests/` เดิม)
+
 ## v0.5.1 — 2026-09-06
 
 ปิด Phase 5 — tenant-aware CLI + **module CLI extension point** · **ไม่มี breaking change**

@@ -52,6 +52,7 @@ Modular BaaS / Dev Framework บน FastAPI — ขยายได้ด้ว�
 - [x] Phase 4 — `line_oa` (webhook หลาย channel, account linking, agent bridge), module generator
 - [x] Phase 4.5 — DX: โมดูลตัวอย่าง `faq`, หน้าแชท `/agent`, [MODULE_GUIDE](docs/MODULE_GUIDE.md), CI
 - [x] Phase 5 — Multi-tenant: โมดูล `tenancy` (tenant/workspace/membership + `core.tenancy` scope helper + RLS), `core.clock`, `stamp` (v0.3.0) + โมดูล `admin` (Admin UI, v0.5.0) + tenant-aware CLI `python cli.py tenancy ...` (v0.5.1)
+- [x] รองพื้น Phase 6 — [Kernel public contract](docs/KERNEL_CONTRACT.md): conformance gate ล็อก public surface ของ `core` ให้ CI แดงเมื่อ signature/symbol เปลี่ยนโดยไม่ตั้งใจ (v0.5.2)
 
 ## Development
 

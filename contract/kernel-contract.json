@@ -1,0 +1,223 @@
+{
+  "symbols": {
+    "core.ai": {
+      "agent_tool": {
+        "kind": "function",
+        "params": [
+          "module",
+          "permission?"
+        ]
+      },
+      "get_tools": {
+        "kind": "function",
+        "params": [
+          "modules?"
+        ]
+      }
+    },
+    "core.app": {
+      "create_app": {
+        "kind": "function",
+        "params": []
+      }
+    },
+    "core.auth": {
+      "create_access_token": {
+        "kind": "function",
+        "params": [
+          "user_id"
+        ]
+      },
+      "decode_access_token": {
+        "kind": "function",
+        "params": [
+          "token"
+        ]
+      },
+      "get_current_user": {
+        "kind": "function",
+        "params": [
+          "credentials",
+          "session"
+        ]
+      },
+      "hash_password": {
+        "kind": "function",
+        "params": [
+          "password"
+        ]
+      },
+      "require_permission": {
+        "kind": "function",
+        "params": [
+          "permission"
+        ]
+      },
+      "verify_password": {
+        "kind": "function",
+        "params": [
+          "password",
+          "password_hash"
+        ]
+      }
+    },
+    "core.clock": {
+      "FakeClock": {
+        "kind": "class",
+        "params": [
+          "start"
+        ]
+      },
+      "now": {
+        "kind": "function",
+        "params": []
+      },
+      "set_now": {
+        "kind": "function",
+        "params": [
+          "value"
+        ]
+      }
+    },
+    "core.config": {
+      "get_settings": {
+        "kind": "function",
+        "params": []
+      }
+    },
+    "core.db": {
+      "Base": {
+        "kind": "class",
+        "params": [
+          "**kwargs"
+        ]
+      },
+      "dispose_engine": {
+        "kind": "function",
+        "params": []
+      },
+      "get_session": {
+        "kind": "function",
+        "params": []
+      },
+      "get_sessionmaker": {
+        "kind": "function",
+        "params": []
+      }
+    },
+    "core.jobs": {
+      "background_job": {
+        "kind": "function",
+        "params": [
+          "fn"
+        ]
+      }
+    },
+    "core.ratelimit": {
+      "RateLimited": {
+        "kind": "class",
+        "params": [
+          "retry_after"
+        ]
+      },
+      "check_rate_limit": {
+        "kind": "function",
+        "params": [
+          "key",
+          "limit",
+          "window_seconds",
+          "increment?"
+        ]
+      },
+      "client_ip": {
+        "kind": "function",
+        "params": [
+          "request"
+        ]
+      }
+    },
+    "core.registry": {
+      "installed_modules": {
+        "kind": "function",
+        "params": [
+          "session"
+        ]
+      }
+    },
+    "core.runtime": {
+      "ctx": {
+        "kind": "constant",
+        "type": "AppContext"
+      }
+    },
+    "core.templating": {
+      "render": {
+        "kind": "function",
+        "params": [
+          "template",
+          "context?"
+        ]
+      }
+    },
+    "core.tenancy": {
+      "ID_PATTERN": {
+        "kind": "constant",
+        "type": "Pattern"
+      },
+      "InvalidId": {
+        "kind": "class",
+        "params": []
+      },
+      "Principal": {
+        "kind": "class",
+        "params": [
+          "type",
+          "id",
+          "display_name?"
+        ]
+      },
+      "TenantIsolationError": {
+        "kind": "class",
+        "params": []
+      },
+      "TenantScope": {
+        "kind": "class",
+        "params": [
+          "tenant_id",
+          "principal",
+          "workspace_id?",
+          "correlation_id?"
+        ]
+      },
+      "bind_tenant": {
+        "kind": "function",
+        "params": [
+          "session",
+          "tenant_id"
+        ]
+      },
+      "new_id": {
+        "kind": "function",
+        "params": [
+          "prefix"
+        ]
+      },
+      "scoped": {
+        "kind": "function",
+        "params": [
+          "stmt",
+          "model",
+          "scope"
+        ]
+      },
+      "validate_id": {
+        "kind": "function",
+        "params": [
+          "value",
+          "field?"
+        ]
+      }
+    }
+  },
+  "version": 1
+}
