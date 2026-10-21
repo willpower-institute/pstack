@@ -1,6 +1,6 @@
 # ADR-0001: สาขาทำ frontend ได้เอง · ส่วนกลางเป็น backend of record · เชื่อมผ่าน contract เดียวต่อโดเมน
 
-- สถานะ: **proposed** — รออนุมัติจากเจ้าของงาน (decision `dec-fc13090f` บนโต๊ะกลาง ws-001)
+- สถานะ: **accepted** — อนุมัติ 2026-10-21 แบบ relayed โดยเจ้าของงาน (decision `dec-fc13090f` บนโต๊ะกลาง ws-001; ยืนยันซ้ำด้วยรหัสได้ภายหลัง)
 - วันที่: 2026-10-21
 - ที่มา: คำยืนยันของเจ้าของงาน (monthop-gmail) ในกระทู้ `dis-65134078` seq 69–70
 - ขอบเขต: ทุก repo ใน `willpower-institute/*` และ `pstack-*` ของ monthop-gmail
