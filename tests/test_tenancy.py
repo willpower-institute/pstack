@@ -34,7 +34,7 @@ def test_clock_rejects_naive():
     from core.clock import set_now
 
     with pytest.raises(ValueError):
-        set_now(datetime.datetime(2026, 1, 1))  # noqa: DTZ001 — จงใจ naive เพื่อทดสอบว่าถูกปฏิเสธ
+        set_now(datetime.datetime(2026, 1, 1))  # จงใจ naive เพื่อทดสอบว่าถูกปฏิเสธ
     set_now(None)  # cleanup
 
 
